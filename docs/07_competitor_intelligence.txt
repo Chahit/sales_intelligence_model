@@ -1,0 +1,151 @@
+================================================================================
+MODULE: COMPETITOR INTELLIGENCE
+FILE:   frontend/tabs/competitor_intel.py
+ENGINE: ml_engine/competitor_mixin.py (inferred from codebase)
+================================================================================
+
+PURPOSE
+-------
+Competitor Intelligence helps Consistent's sales team understand where their
+competitors are beating them on PRICE for the same or equivalent products.
+
+When a competitor is sell a substitute for Rs 850 while Consistent sells it
+for Rs 1,000 — the partner is incentivized to switch supplier. This module
+identifies those dangerous price gaps before partners start churning.
+
+Additionally, it surfaces where Consistent has a PRICE ADVANTAGE — products
+where our pricing is significantly better — which are natural upsell
+opportunities ('we're cheaper than the competition here, stock up').
+
+
+WHAT IT SHOWS
+-------------
+1. Competitor Summary         - How many competitors tracked, products compared
+2. Undercut Products Table    - Products where competitors are cheaper
+   - Product name, competitor name, their price, our price, % difference
+3. Price Advantage Products   - Products where we are cheaper
+4. Price Gap Distribution     - Histogram of competitive gaps
+5. Regional Exposure          - Which states are most exposed to competitor undercutting
+6. Partner Overlap            - Which of our partners also buy from competitors
+
+
+ALGORITHMS & FORMULAS USED
+---------------------------
+
+A. PRICE COMPARISON
+-------------------
+For each product where competitor data exists:
+
+  price_diff_abs = competitor_price - our_price
+  price_diff_pct = (competitor_price - our_price) / our_price × 100
+
+Interpretation:
+  price_diff_pct < 0  → Competitor is CHEAPER (they are undercutting us)
+  price_diff_pct > 0  → Competitor is MORE EXPENSIVE (we have price advantage)
+
+"Undercut threshold" (configurable, default: -5%):
+  Products where price_diff_pct < -5% are flagged as "actively being undercut"
+  (5% is meaningful — below that, partners absorb it as goodwill/relationship premium)
+
+
+B. UNDERCUT DETECTION (get_undercut_products)
+---------------------------------------------
+SQL/Pandas logic:
+  1. Join our product catalog with competitor price table on product_name (or equivalent)
+  2. Compute price_diff_pct per (our_product, competitor) pair
+  3. Filter where price_diff_pct < min_diff_pct threshold
+  4. Rank by how severely we're being undercut (most negative diff first)
+
+Output per row:
+  product_name:      Our product being undercut
+  competitor_name:   Which competitor is cheaper
+  our_price:         Our current selling price
+  competitor_price:  Competitor's price for equivalent product
+  price_diff_pct:    How much cheaper competitor is (%)
+  state:             Where this price comparison applies (if regional data exists)
+
+
+C. COMPETITIVE EXPOSURE SCORING
+--------------------------------
+For each partner, compute a "competitive exposure score":
+
+  n_undercut_products = number of products partner buys where we're undercut
+  avg_undercut_severity = mean price_diff_pct for those products
+  
+  exposure_score = n_undercut_products × |avg_undercut_severity| / 100
+
+Partners with high exposure + high churn probability are DOUBLE risk:
+  → They are price-sensitive AND being actively targeted by cheaper competitors
+  → These partners get a "Competitive Risk" flag in Partner 360
+
+Why this matters: A partner seeing 15% cheaper alternatives for 3 of their top
+5 products is a near-certain churner — and the reason won't show up in the
+purchase data until AFTER they've switched.
+
+
+D. REGIONAL PRICE ANALYSIS
+----------------------------
+If competitor data includes state/region:
+  Group undercut products by state
+  Sum up exposure across all partners in that state
+  
+  state_exposure = Σ(partner_exposure × partner_revenue_weight)
+
+Output: Heat map / table of states ranked by competitive vulnerability.
+
+This helps the regional sales manager know which territory to defend first.
+
+
+E. PRODUCT SUMMARY STATS (get_competitor_summary)
+--------------------------------------------------
+Returns high-level stats dict:
+  our_product_count:   Total distinct products in our catalog tracked
+  competitor_count:    Total distinct competitors monitored
+  products_undercut:   Count with price_diff_pct < -5%
+  products_advantage:  Count with price_diff_pct > +5%
+  products_parity:     Count within ±5% (effectively same price)
+  avg_undercut_pct:    Average severity where we're being undercut
+  avg_advantage_pct:   Average advantage where we're cheaper
+
+
+DATA FLOW
+---------
+  PostgreSQL → competitor_prices table (competitor_name, product_name, price, date)
+             → our product catalog (product_name, our_price)
+             → competitor_mixin: join + compute price_diff_pct
+             → get_competitor_summary() → summary stats
+             → get_undercut_products(min_diff_pct=-5.0) → undercut table
+             → competitor_intel.py renders tables and charts
+
+
+IMPROVEMENTS / SUGGESTIONS
+---------------------------
+1. AUTOMATED PRICE SCRAPING: Instead of manual competitor price entry, build
+   a web scraper (or use an API from TradeIndia / IndiaMart) to automatically
+   refresh competitor prices weekly.
+
+2. PRICE ELASTICITY MODELING: For each product, estimate how much a 1% price
+   reduction increases our order volume with price-sensitive partners.
+
+3. DYNAMIC PRICING SUGGESTIONS: If we're 8% more expensive on a product,
+   and that product has 0.45 gross margin, calculate the minimum discount
+   that still maintains profitability while matching competitor partly.
+
+4. ALERT SYSTEM: When a competitor drops their price more than 10% on any
+   product overnight, auto-send a Slack/email alert to the product manager.
+
+5. PARTNER-LEVEL PRICE SENSITIVITY: Track which partners ACTUALLY switched
+   away when price gaps existed — this gives a real price-sensitivity score
+   per partner type.
+
+6. WIN/LOSS ANALYSIS: Link competitor intel to the recommendation feedback
+   data. When a partner rejects a pitch, capture whether "price" was cited
+   as the reason and map to competitor product.
+
+7. BRAND PERCEPTION PREMIUM: Some partners will pay 10% more for a trusted
+   brand. Quantify this "brand premium" per partner segment to know where
+   price matching is unnecessary.
+
+8. SUPPLIER NEGOTIATION SUPPORT: Use undercut data to negotiate better
+   purchase prices with our own suppliers: "Competitor buys at X, we need
+   to be at Y to compete — can you meet us at Y?"
