@@ -52,43 +52,6 @@ class BaseLoaderMixin:
             self.df_stock_stats = pd.DataFrame(
                 columns=["product_name", "total_stock_qty", "max_age_days"]
             )
-            
-        # Dynamically calculate better max_age_days from actual transaction recency
-        try:
-            if not self.df_fact.empty and "product_name" in self.df_fact.columns and "date" in self.df_fact.columns:
-                df_tx = self.df_fact.copy()
-                df_tx["date"] = pd.to_datetime(df_tx["date"], errors="coerce")
-                # Max age = today - last time the product was sold 
-                # (Alternative: today - first time it was seen, but recency is better for dead stock)
-                # Max age = today - first time the product was seen in the system
-                first_seen = df_tx.groupby("product_name")["date"].min().reset_index()
-                
-                anchor_date = pd.Timestamp.now()
-                max_db_date = df_tx["date"].max()
-                if max_db_date and max_db_date < anchor_date - pd.Timedelta(days=30):
-                    anchor_date = max_db_date
-                    
-                first_seen["dynamic_max_age_days"] = (anchor_date - first_seen["date"]).dt.days
-                
-                # Merge back into stock stats
-                if not self.df_stock_stats.empty and "product_name" in self.df_stock_stats.columns:
-                    merged = self.df_stock_stats.merge(
-                        first_seen[["product_name", "dynamic_max_age_days"]], 
-                        on="product_name", 
-                        how="left"
-                    )
-                    # Use the dynamic min date (which gives us max age), keeping original if missing
-                    merged["max_age_days"] = np.where(
-                        merged["dynamic_max_age_days"].notna(), 
-                        merged["dynamic_max_age_days"], 
-                        merged["max_age_days"]
-                    )
-                    # Add base buffer since inventory usually arrives before it's sold
-                    # If we only have 90 days of transactions, assume the oldest stuff might be older
-                    merged["max_age_days"] = merged["max_age_days"] + 30 
-                    self.df_stock_stats = merged.drop(columns=["dynamic_max_age_days"])
-        except Exception as e:
-            print(f"Error calculating dynamic max_age_days: {e}")
 
         if self.strict_view_only:
             self.df_partner_features = self._timed_step(

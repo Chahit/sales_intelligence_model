@@ -602,7 +602,7 @@ class AssociationsMixin:
     # =================================================================
 
     def mine_sequential_patterns(self, max_gap_days=30, min_support_count=3, min_confidence=0.1):
-        """Sequential patterns: A then B within N days."""
+        """Sequential patterns: A then B within N days, with partner company names."""
         from collections import defaultdict
         if self.strict_view_only:
             return pd.DataFrame(), {"status": "skipped"}
@@ -613,10 +613,11 @@ class AssociationsMixin:
             SELECT MAX(date)::date AS last_recorded_date
             FROM transactions_dsr t WHERE {approved}
         )
-        SELECT t.party_id, p.product_name, t.date::date AS txn_date
+        SELECT t.party_id, mp.company_name, p.product_name, t.date::date AS txn_date
         FROM transactions_dsr t
         JOIN transactions_dsr_products tp ON t.id = tp.dsr_id
         JOIN master_products p ON tp.product_id = p.id
+        JOIN master_party mp ON mp.id = t.party_id
         CROSS JOIN max_date_cte md
         WHERE {approved}
           AND t.date >= md.last_recorded_date - INTERVAL '{months} months'
@@ -633,7 +634,10 @@ class AssociationsMixin:
         df["txn_date"] = pd.to_datetime(df["txn_date"], errors="coerce")
         seq_counts = defaultdict(int)
         prod_counts = defaultdict(int)
+        seq_partners = defaultdict(set)
         total_partners = 0
+
+        pid_to_name = df[["party_id", "company_name"]].drop_duplicates().set_index("party_id")["company_name"].to_dict()
 
         for pid, grp in df.groupby("party_id"):
             total_partners += 1
@@ -655,6 +659,7 @@ class AssociationsMixin:
                     pair = (pa, pb)
                     if pair not in seen:
                         seq_counts[pair] += 1
+                        seq_partners[pair].add(pid_to_name.get(pid, str(pid)))
                         seen.add(pair)
 
         rows = []
@@ -669,6 +674,7 @@ class AssociationsMixin:
                 continue
             br = prod_counts.get(b, 0) / max(total_partners, 1)
             lift = conf / br if br > 0 else 0.0
+            partner_list = sorted(seq_partners[(a, b)])
             rows.append({
                 "product_a": a, "product_b": b,
                 "sequence_count": cnt, "support_a": ac,
@@ -677,6 +683,7 @@ class AssociationsMixin:
                 "max_gap_days": max_gap_days,
                 "pattern": f"{a} -> {b} (within {max_gap_days}d)",
                 "source": "sequential_pattern",
+                "partner_names": ", ".join(partner_list),
             })
         result = pd.DataFrame(rows)
         if not result.empty:
@@ -694,17 +701,19 @@ class AssociationsMixin:
         if self.strict_view_only:
             return pd.DataFrame(), {"status": "skipped"}
 
+
         months = int(getattr(self, "mba_lookback_months", 6))
         query = """
         WITH max_date_cte AS (
             SELECT MAX(date)::date AS last_recorded_date
             FROM transactions_dsr t WHERE {approved}
         )
-        SELECT t.party_id, mg.group_name AS category,
+        SELECT t.party_id, mp.company_name, mg.group_name AS category,
                p.product_name, tp.net_amt, t.date::date AS txn_date
         FROM transactions_dsr t
         JOIN transactions_dsr_products tp ON t.id = tp.dsr_id
         JOIN master_products p ON tp.product_id = p.id
+        JOIN master_party mp ON mp.id = t.party_id
         LEFT JOIN master_group mg ON p.group_id = mg.id
         CROSS JOIN max_date_cte md
         WHERE {approved}
@@ -728,7 +737,10 @@ class AssociationsMixin:
 
         upgrade_counts = defaultdict(int)
         cat_partner_counts = defaultdict(int)
+        upgrade_partners = defaultdict(set)
         total_partners = 0
+
+        pid_to_name = df[["party_id", "company_name"]].drop_duplicates().set_index("party_id")["company_name"].to_dict()
 
         for pid, grp in df.groupby("party_id"):
             total_partners += 1
@@ -748,6 +760,7 @@ class AssociationsMixin:
                     pair = (cx, str(cy))
                     if pair not in seen:
                         upgrade_counts[pair] += 1
+                        upgrade_partners[pair].add(pid_to_name.get(pid, str(pid)))
                         seen.add(pair)
 
         rows = []
@@ -762,6 +775,7 @@ class AssociationsMixin:
                 continue
             yr = cat_partner_counts.get(cy, 0) / max(total_partners, 1)
             lift = conf / yr if yr > 0 else 0.0
+            partner_list = sorted(upgrade_partners[(cx, cy)])
             rows.append({
                 "category_x": cx, "category_y": cy,
                 "upgrade_count": cnt, "partners_in_x": xp,
@@ -770,6 +784,7 @@ class AssociationsMixin:
                 "gap_days": gap_days,
                 "pattern": f"Premium in {cx} -> buys {cy} within {gap_days}d",
                 "source": "cross_category",
+                "partner_names": ", ".join(partner_list),
             })
         result = pd.DataFrame(rows)
         if not result.empty:

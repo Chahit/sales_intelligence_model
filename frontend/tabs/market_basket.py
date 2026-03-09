@@ -335,6 +335,23 @@ def render(ai):
                                 use_container_width=True,
                                 hide_index=True,
                             )
+                            # Show partner names for a selected pattern
+                            if "partner_names" in seq_df.columns:
+                                st.markdown("---")
+                                st.markdown("**🏢 See which partners follow a pattern:**")
+                                chosen = st.selectbox(
+                                    "Select a pattern",
+                                    seq_df["pattern"].tolist(),
+                                    key="seq_pattern_picker"
+                                )
+                                row = seq_df[seq_df["pattern"] == chosen].iloc[0]
+                                partners = [p.strip() for p in str(row.get("partner_names", "")).split(",") if p.strip()]
+                                if partners:
+                                    st.success(f"**{len(partners)} partner(s)** followed this sequence:")
+                                    for p in partners:
+                                        st.markdown(f"• {p}")
+                                else:
+                                    st.info("No partner names available for this pattern.")
                         else:
                             st.warning(f"No patterns found: {seq_report.get('reason', 'try lower thresholds')}")
                     except Exception as e:
@@ -373,6 +390,23 @@ def render(ai):
                                 use_container_width=True,
                                 hide_index=True,
                             )
+                            # Show partner names for a selected cross-category pattern
+                            if "partner_names" in cc_df.columns:
+                                st.markdown("---")
+                                st.markdown("**🏢 See which partners follow a pattern:**")
+                                chosen_cc = st.selectbox(
+                                    "Select a pattern",
+                                    cc_df["pattern"].tolist(),
+                                    key="cc_pattern_picker"
+                                )
+                                cc_row = cc_df[cc_df["pattern"] == chosen_cc].iloc[0]
+                                partners_cc = [p.strip() for p in str(cc_row.get("partner_names", "")).split(",") if p.strip()]
+                                if partners_cc:
+                                    st.success(f"**{len(partners_cc)} partner(s)** showed this upgrade pattern:")
+                                    for p in partners_cc:
+                                        st.markdown(f"• {p}")
+                                else:
+                                    st.info("No partner names available for this pattern.")
                         else:
                             st.warning(f"No patterns found: {cc_report.get('reason', 'try lower thresholds')}")
                     except Exception as e:
