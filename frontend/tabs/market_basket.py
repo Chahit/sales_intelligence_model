@@ -1,16 +1,25 @@
 import streamlit as st
+import pandas as pd
 import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from styles import apply_global_styles, section_header, page_caption
+from styles import apply_global_styles, section_header, page_caption, page_header, skeleton_loader
 
 
 def render(ai):
     apply_global_styles()
-    st.title("Market Basket Analysis")
-    page_caption("Discover product bundle rules and partner-specific cross-sell opportunities from sales data.")
-    with st.spinner("Loading association rules..."):
-        ai.ensure_associations()
-        ai.ensure_clustering()
+    page_header(
+        title="Market Basket Analysis",
+        subtitle="Discover product bundle rules and partner-specific cross-sell opportunities from sales data.",
+        icon="🛒",
+        accent_color="#0891b2",
+        badge_text="FP-Growth",
+    )
+    skel = st.empty()
+    with skel.container():
+        skeleton_loader(n_metric_cards=3, n_rows=3, label="Mining association rules...")
+    ai.ensure_associations()
+    ai.ensure_clustering()
+    skel.empty()
 
     f1, f2, f3, f4, f5 = st.columns([2, 1, 1, 1, 1])
     with f1:
@@ -53,6 +62,29 @@ def render(ai):
         include_low_support=include_low_support,
         limit=300,
     )
+
+    st.markdown("---")
+    st.subheader("🛠️ Bundle Builder Simulator")
+    st.caption("Select a base product to instantly see the best items to bundle with it.")
+    
+    unique_products = sorted(list(set(df_assoc["product_a"].dropna().unique()) | set(df_assoc["product_b"].dropna().unique()))) if not df_assoc.empty else []
+    
+    base_product = st.selectbox("Select Base Product", [""] + unique_products)
+    if base_product:
+        bundle_options = df_assoc[df_assoc["product_a"] == base_product].sort_values("confidence_a_to_b", ascending=False).head(5)
+        if not bundle_options.empty:
+            b_cols = st.columns(len(bundle_options))
+            for idx, row in enumerate(bundle_options.itertuples()):
+                with b_cols[idx]:
+                    st.success(f"**➕ {row.product_b}**\n\n*Conf: {row.confidence_a_to_b:.0%} | Lift: {row.lift_a_to_b:.1f}x*")
+        else:
+            st.info("No strong bundle partners found for this product.")
+
+
+    st.markdown("---")
+
+
+
 
     left, right = st.columns([2, 1])
     with left:

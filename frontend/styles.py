@@ -64,11 +64,6 @@ GLOBAL_CSS = """
     letter-spacing: 0.07em;
     text-transform: uppercase;
 }
-.divider-label::before, .divider-label::after {
-    content: "";
-    flex: 1;
-    border-bottom: 1px solid #2a2a2a;
-}
 
 /* ── Info banner ─────────────────────────────────── */
 .info-banner {
@@ -104,6 +99,78 @@ GLOBAL_CSS = """
 
 /* ── Compact dataframe ───────────────────────────── */
 [data-testid="stDataFrame"] { border-radius: 6px; overflow: hidden; }
+
+/* ── Skeleton shimmer ────────────────────────────── */
+@keyframes shimmer {
+  0%   { background-position: -800px 0; }
+  100% { background-position:  800px 0; }
+}
+.skeleton {
+  display: inline-block;
+  width: 100%;
+  border-radius: 6px;
+  background: linear-gradient(90deg, #1a1a1a 25%, #252525 50%, #1a1a1a 75%);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s infinite linear;
+}
+.sk-row { display:flex; gap:12px; margin-bottom:14px; }
+.sk-card {
+  border-radius: 10px;
+  background: #111;
+  border: 1px solid #222;
+  padding: 18px 16px;
+  flex: 1;
+}
+
+/* ── Page hero header ─────────────────────────────── */
+.page-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 18px 22px;
+  margin-bottom: 22px;
+  border-radius: 12px;
+  border: 1px solid #222;
+  background: linear-gradient(135deg, #111 0%, #161616 100%);
+  position: relative;
+  overflow: hidden;
+}
+.page-hero::before {
+  content: "";
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 3px;
+  background: var(--hero-accent, #2563eb);
+  border-radius: 12px 12px 0 0;
+}
+.page-hero-icon {
+  font-size: 36px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+.page-hero-text { flex: 1; }
+.page-hero-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #f0f0f0;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.01em;
+}
+.page-hero-sub {
+  font-size: 13px;
+  color: #777;
+  margin: 0;
+  line-height: 1.4;
+}
+.page-hero-badge {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 20px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
 </style>
 """
 
@@ -139,6 +206,67 @@ def banner(message: str, color: str = "blue"):
 # ── Helper: page description caption ─────────────────────────────────────────
 def page_caption(text: str):
     st.markdown(f'<p class="page-header-cap">{text}</p>', unsafe_allow_html=True)
+
+
+# ── Helper: skeleton loader ───────────────────────────────────────────────────
+def skeleton_loader(n_metric_cards: int = 4, n_rows: int = 2, label: str = "Loading data..."):
+    """
+    Render a shimmer skeleton screen.
+    Shows metric card placeholders + row placeholders during data loading.
+    """
+    st.markdown(
+        f'<p style="color:#555;font-size:13px;margin-bottom:12px">⏳ {label}</p>',
+        unsafe_allow_html=True,
+    )
+    # Metric cards row
+    card_html = ""
+    for _ in range(n_metric_cards):
+        card_html += """
+        <div class="sk-card">
+          <div class="skeleton" style="height:11px;width:50%;margin-bottom:10px"></div>
+          <div class="skeleton" style="height:28px;width:70%;margin-bottom:6px"></div>
+          <div class="skeleton" style="height:10px;width:40%"></div>
+        </div>"""
+    st.markdown(f'<div class="sk-row">{card_html}</div>', unsafe_allow_html=True)
+    # Content rows
+    for w in (["100%", "85%", "90%", "75%", "95%"])[:n_rows]:
+        st.markdown(
+            f'<div class="skeleton" style="height:14px;width:{w};margin-bottom:10px"></div>',
+            unsafe_allow_html=True,
+        )
+
+
+# ── Helper: unified hero page header ─────────────────────────────────────────
+def page_header(
+    title: str,
+    subtitle: str = "",
+    icon: str = "📊",
+    accent_color: str = "#2563eb",
+    badge_text: str = "",
+    badge_color: str = "#1e3a5f",
+):
+    """
+    Render a premium hero header with icon, title, subtitle and optional badge.
+    Replaces bare st.title() + page_caption() calls for a consistent look.
+    """
+    badge_html = (
+        f'<span class="page-hero-badge" '
+        f'style="background:{badge_color};color:#7eb8f0;border:1px solid #1e3a5f">'
+        f'{badge_text}</span>'
+        if badge_text else ""
+    )
+    st.markdown(
+        f"""
+        <div class="page-hero" style="--hero-accent:{accent_color}">
+          <div class="page-hero-icon">{icon}</div>
+          <div class="page-hero-text">
+            <p class="page-hero-title">{title}</p>
+            <p class="page-hero-sub">{subtitle}</p>
+          </div>
+          {badge_html}
+        </div>""",
+        unsafe_allow_html=True,
+    )
 
 
 # ── Color helpers used in tables ──────────────────────────────────────────────

@@ -1,26 +1,34 @@
 import pandas as pd
 import streamlit as st
 
-import sys, os
+import sys, os, re
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
 from ml_engine.services.export_service import (
     export_recommendation_plan_pdf,
     export_recommendation_plan_excel,
 )
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from styles import apply_global_styles, section_header, page_caption, banner
+from styles import apply_global_styles, section_header, page_caption, banner, page_header, skeleton_loader
 
 
 def render(ai):
     apply_global_styles()
-    st.title("Recommendation Hub")
-    page_caption("Partner-specific action plan powered by cluster, churn, credit, peer gaps, and affinity signals.")
-    with st.spinner("Loading recommendation context..."):
-        ai.ensure_clustering()
-        if ai.enable_realtime_partner_scoring:
-            ai.ensure_churn_forecast()
-            ai.ensure_credit_risk()
-            ai.ensure_associations()
+    page_header(
+        title="Recommendation Hub",
+        subtitle="Partner-specific action plan powered by cluster, churn, credit, peer gaps, and affinity signals.",
+        icon="💡",
+        accent_color="#f59e0b",
+        badge_text="AI-Powered",
+    )
+    skel = st.empty()
+    with skel.container():
+        skeleton_loader(n_metric_cards=4, n_rows=4, label="Loading recommendation context...")
+    ai.ensure_clustering()
+    if ai.enable_realtime_partner_scoring:
+        ai.ensure_churn_forecast()
+        ai.ensure_credit_risk()
+    skel.empty()
+    ai.ensure_associations()
 
     if ai.matrix is None or ai.matrix.empty:
         st.warning("No partner matrix available. Refresh data and try again.")
@@ -58,13 +66,23 @@ def render(ai):
                 index=0,
                 key="nl_scope",
             )
-        nq3, nq5 = st.columns(2)
+        nq3, nq4, nq5 = st.columns(3)
         with nq3:
             nl_top_n = st.slider("NL Query Top N", 5, 100, 20, 5)
+        with nq4:
+            st.markdown("<br>", unsafe_allow_html=True)
+            advanced_filters = st.checkbox("Show Advanced Filters")
         with nq5:
             st.write("")
             st.write("")
-            nl_run = st.button("Run NL Query")
+            nl_run = st.button("Run NL Query", use_container_width=True)
+            
+        if advanced_filters:
+            af1, af2 = st.columns(2)
+            with af1:
+                min_conf = st.slider("Min Confidence Threshold", 0.0, 1.0, 0.15, 0.05)
+            with af2:
+                min_lift = st.slider("Min Lift Threshold", 1.0, 5.0, 1.0, 0.5)
     # ── Tab 3: Advanced ───────────────────────────────────────────────────────
     with tab_adv:
         model_name_adv = str(getattr(ai, "gemini_model", "gemini-1.5-flash"))
@@ -195,28 +213,65 @@ def render(ai):
         st.warning("No recommendations generated.")
     else:
         df = pd.DataFrame(actions)
-        show_cols = [
-            "sequence",
-            "action_type",
-            "recommended_offer",
-            "priority_score",
-            "why_relevant",
-            "suggested_sequence",
-        ]
-        keep = [c for c in show_cols if c in df.columns]
-        st.dataframe(
-            df[keep],
-            column_config={
-                "sequence": st.column_config.NumberColumn("Seq"),
-                "action_type": "Action Type",
-                "recommended_offer": "Recommended Offer",
-                "priority_score": st.column_config.NumberColumn("Priority Score", format="%.2f"),
-                "why_relevant": "Why Relevant",
-                "suggested_sequence": "Execution Guidance",
-            },
-            use_container_width=True,
-            hide_index=True,
-        )
+        
+        # Category / Action Type Filter
+        available_types = sorted([str(x) for x in df["action_type"].unique() if pd.notna(x)])
+        selected_types = st.multiselect("Filter by Category / Action", available_types, default=available_types)
+        
+        if selected_types:
+            df = df[df["action_type"].isin(selected_types)]
+            
+        if df.empty:
+            st.info("No recommendations match the selected filters.")
+        else:
+            # Polished Native Table View
+            def clean_html(text):
+                if not text: return ""
+                return re.sub('<[^<]+?>', '', str(text)).strip()
+
+            df_display = df.copy()
+            
+            # Map icons for a premium look
+            icon_map = {
+                "up-sell": "📈", "cross-sell": "🛒", "rescue": "🚨", "retention": "🔄", "affinity": "📦"
+            }
+            
+            df_display["Type"] = df_display["action_type"].apply(lambda x: f"{icon_map.get(next((k for k in icon_map if k in str(x).lower()), ''), '📦')} {str(x).upper()}")
+            df_display["Recommendation"] = df_display["recommended_offer"]
+            df_display["Logic"] = df_display["why_relevant"].apply(clean_html)
+            df_display["Execution"] = df_display["suggested_sequence"].apply(clean_html)
+            df_display["Priority"] = df_display["priority_score"]
+            
+            # Show the table
+            st.dataframe(
+                df_display[["Priority", "Type", "Recommendation", "Logic", "Execution"]].sort_values("Priority", ascending=False),
+                column_config={
+                    "Priority": st.column_config.ProgressColumn("Confidence", min_value=0, max_value=100, format="%.0f"),
+                    "Type": st.column_config.TextColumn("Category", width="small"),
+                    "Recommendation": st.column_config.TextColumn("Offer", width="medium"),
+                    "Logic": st.column_config.TextColumn("Why This?", width="large"),
+                    "Execution": st.column_config.TextColumn("Next Step", width="medium"),
+                },
+                use_container_width=True,
+                hide_index=True,
+            )
+            st.markdown("---")
+
+    # ======================================================================
+    # FP-Growth Predictive Bundles
+    # ======================================================================
+    st.subheader("Predictive Bundles (FP-Growth)")
+    bundles = ai.get_partner_bundle_recommendations(partner_name=selected_partner, top_n=5)
+    if not bundles.empty:
+        st.caption("Frequently bought together by similar buyers:")
+        b_cols = st.columns(len(bundles))
+        for idx, row in enumerate(bundles.itertuples()):
+            if idx < len(b_cols):
+                with b_cols[idx]:
+                    st.info(f"**{row.trigger_product}** \n\n ➕ {row.recommended_product}\n\n*Confidence: {row.confidence:.0%}*")
+    else:
+        st.info("No strong predictive bundles found for this partner's purchase history.")
+
 
     explanation = plan.get("plain_language_explanation", {}) or {}
 
@@ -224,151 +279,18 @@ def render(ai):
     # Enhanced Recommendations (Bandits + Collaborative + Learned Scoring)
     # ======================================================================
     st.markdown("---")
-    enh_tab, nba_tab = st.tabs(["Enhanced AI Recommendations", "Next Best Action (Journey)"])
-
-    with enh_tab:
-        st.caption(
-            "Uses contextual bandits, collaborative filtering, learned priority scoring, and diversity constraints."
-        )
-        if st.button("Generate Enhanced Plan", key="btn_enhanced_reco"):
-            with st.spinner("Running enhanced recommendation engine..."):
-                try:
-                    enh_plan = ai.get_enhanced_recommendation_plan(
-                        partner_name=selected_partner,
-                        top_n=int(top_n),
-                        use_genai=True,
-                        api_key=key if key else None,
-                        model=model_name,
-                    )
-                    if enh_plan and enh_plan.get("status") == "ok":
-                        upgrades = enh_plan.get("upgrades_applied", [])
-                        st.success(f"Upgrades applied: {', '.join(upgrades)}")
-
-                        enh_actions = enh_plan.get("actions", [])
-                        if enh_actions:
-                            enh_df = pd.DataFrame(enh_actions)
-                            enh_cols = [c for c in [
-                                "sequence", "action_type", "recommended_offer",
-                                "priority_score", "why_relevant",
-                            ] if c in enh_df.columns]
-                            st.dataframe(
-                                enh_df[enh_cols],
-                                column_config={
-                                    "sequence": st.column_config.NumberColumn("Seq"),
-                                    "priority_score": st.column_config.NumberColumn("Priority", format="%.2f"),
-                                },
-                                use_container_width=True,
-                                hide_index=True,
-                            )
-
-                        collab = enh_plan.get("collaborative_recommendations", [])
-                        if collab:
-                            with st.expander("Collaborative Filtering Signals", expanded=False):
-                                for cr in collab[:5]:
-                                    st.write(
-                                        f"- **{cr.get('product', 'Product')}** "
-                                        f"(score: {float(cr.get('collab_score', 0)):.2f}, "
-                                        f"similar buyers: {cr.get('peer_count', '?')})"
-                                    )
-
-                        if enh_plan.get("genai"):
-                            st.info(enh_plan["genai"])
-                        if enh_plan.get("genai_error"):
-                            st.warning(enh_plan["genai_error"])
-                    else:
-                        st.warning(
-                            enh_plan.get("reason", "Enhanced plan unavailable.")
-                            if isinstance(enh_plan, dict)
-                            else "Enhanced plan unavailable."
-                        )
-                except Exception as e:
-                    st.error(f"Enhanced recommendation error: {e}")
-
-    with nba_tab:
-        st.caption(
-            "Dynamic multi-step journey: the next action adapts based on what happened previously."
-        )
-        nba1, nba2, nba3 = st.columns(3)
-        with nba1:
-            prev_outcome = st.selectbox(
-                "Previous Outcome",
-                ["(First Contact)", "accepted", "rejected", "won", "lost", "no_response"],
-                index=0,
-                key="nba_outcome",
-            )
-        with nba2:
-            prev_action = st.text_input(
-                "Previous Action (if any)",
-                value="",
-                placeholder="e.g. Cross-sell Bundle A",
-                key="nba_prev_action",
-            )
-        with nba3:
-            nba_top_n = st.slider("Actions", 1, 5, 3, 1, key="nba_top_n")
-
-        if st.button("Get Next Best Action", key="btn_nba"):
-            with st.spinner("Computing journey-aware recommendation..."):
-                try:
-                    outcome_val = None if prev_outcome == "(First Contact)" else prev_outcome
-                    nba_result = ai.get_partner_next_best_action(
-                        partner_name=selected_partner,
-                        previous_outcome=outcome_val,
-                        previous_action_type=prev_action if prev_action.strip() else None,
-                        top_n=int(nba_top_n),
-                    )
-                    if nba_result and nba_result.get("status") == "ok":
-                        journey = nba_result.get("journey_stage", "initial")
-                        guidance = nba_result.get("journey_guidance", "")
-                        st.info(f"**Journey Stage: {journey.upper()}** — {guidance}")
-
-                        nba_actions = nba_result.get("actions", [])
-                        if nba_actions:
-                            nba_df = pd.DataFrame(nba_actions)
-                            nba_cols = [c for c in [
-                                "sequence", "action_type", "recommended_offer",
-                                "priority_score", "why_relevant", "suggested_sequence",
-                            ] if c in nba_df.columns]
-                            st.dataframe(
-                                nba_df[nba_cols],
-                                column_config={
-                                    "sequence": st.column_config.NumberColumn("Seq"),
-                                    "priority_score": st.column_config.NumberColumn("Priority", format="%.2f"),
-                                },
-                                use_container_width=True,
-                                hide_index=True,
-                            )
-
-                        collab = nba_result.get("collaborative_recommendations", [])
-                        if collab:
-                            with st.expander("Similar Partners Also Bought", expanded=False):
-                                for cr in collab[:5]:
-                                    st.write(
-                                        f"- **{cr.get('product', 'Product')}** "
-                                        f"(score: {float(cr.get('collab_score', 0)):.2f})"
-                                    )
-                    else:
-                        st.warning(
-                            nba_result.get("reason", "Next best action unavailable.")
-                            if isinstance(nba_result, dict)
-                            else "Next best action unavailable."
-                        )
-                except Exception as e:
-                    st.error(f"Next best action error: {e}")
-
-    st.markdown("---")
-    if explanation:
-        st.markdown("---")
+    if explanation and isinstance(explanation, dict):
         st.subheader("Recommendation Explanation (Plain Language)")
         summary = str(explanation.get("summary", "")).strip()
         if summary:
             st.info(summary)
         reasons = explanation.get("reasons", []) or []
-        if reasons:
+        if isinstance(reasons, list):
             for idx, reason in enumerate(reasons, start=1):
                 st.write(f"{idx}. {reason}")
 
         signals = explanation.get("model_signals", {}) or {}
-        if signals:
+        if isinstance(signals, dict) and signals:
             s1, s2, s3 = st.columns(3)
             with s1:
                 st.metric(
@@ -385,6 +307,9 @@ def render(ai):
                     "Credit Risk",
                     f"{float(signals.get('credit_risk_score', 0.0)) * 100:.1f}%",
                 )
+    elif explanation and isinstance(explanation, str):
+        st.subheader("Recommendation Explanation")
+        st.info(explanation)
 
     st.markdown("---")
     st.subheader("Auto-generated Pitch Scripts")
@@ -442,11 +367,6 @@ def render(ai):
                 height=230,
             )
 
-            st.markdown("**Gemini-enhanced Version**")
-            if script_pack.get("genai_error"):
-                st.warning(script_pack.get("genai_error"))
-            if script_pack.get("genai"):
-                st.write(script_pack.get("genai"))
 
         st.markdown("---")
         st.subheader("Follow-up Message Generator")
@@ -519,149 +439,5 @@ def render(ai):
                 height=240,
             )
 
-            st.markdown("**Gemini-enhanced Follow-up**")
-            if followup_pack.get("genai_error"):
-                st.warning(followup_pack.get("genai_error"))
-            if followup_pack.get("genai"):
-                st.write(followup_pack.get("genai"))
 
-        st.markdown("---")
-        st.subheader("Feedback-to-Learning Loop")
-        st.caption(
-            "Mark recommendation outcomes and learn weekly which recommendation types and messaging styles convert better."
-        )
 
-        with st.form("recommendation_feedback_form", clear_on_submit=False):
-            fb1, fb2, fb3 = st.columns(3)
-            with fb1:
-                outcome = st.selectbox("Outcome", ["accepted", "rejected", "won", "lost"], index=0)
-                stage = st.selectbox("Stage", ["initial_pitch", "followup"], index=0)
-            with fb2:
-                channel = st.selectbox("Channel", ["whatsapp", "email", "call", "in_person"], index=0)
-                feedback_tone = st.selectbox("Messaging Style (Tone)", ["formal", "friendly", "urgent"], index=0)
-            with fb3:
-                st.write("")
-                st.write("")
-                submitted = st.form_submit_button("Save Feedback")
-            feedback_notes = st.text_area(
-                "Outcome Notes (optional)",
-                value="",
-                height=90,
-                help="Example: customer asked for lower qty trial, price objection, credit hold, etc.",
-            )
-
-            if submitted:
-                save = ai.record_recommendation_feedback(
-                    partner_name=selected_partner,
-                    action_sequence=int(selected_seq),
-                    outcome=outcome,
-                    stage=stage,
-                    channel=channel,
-                    tone=feedback_tone,
-                    notes=feedback_notes,
-                )
-                if save and save.get("status") == "ok":
-                    st.success(f"Feedback saved (id={save.get('feedback_id')}).")
-                else:
-                    st.error(
-                        save.get("reason", "Failed to save feedback.")
-                        if isinstance(save, dict)
-                        else "Failed to save feedback."
-                    )
-
-        lw1, lw3 = st.columns(2)
-        with lw1:
-            learning_window = st.slider("Learning Window (days)", min_value=7, max_value=90, value=7, step=1)
-        with lw3:
-            st.write("")
-            st.write("")
-            refresh_learning = st.button("Refresh Learning Summary")
-
-        learning = ai.get_weekly_feedback_learning_summary(
-            lookback_days=int(learning_window),
-            use_genai=True,
-            api_key=key if key else None,
-            model=model_name,
-        )
-        if refresh_learning:
-            learning = ai.get_weekly_feedback_learning_summary(
-                lookback_days=int(learning_window),
-                use_genai=True,
-                api_key=key if key else None,
-                model=model_name,
-            )
-
-        if not learning or learning.get("status") != "ok":
-            st.warning(
-                learning.get("reason", "Learning summary unavailable.")
-                if isinstance(learning, dict)
-                else "Learning summary unavailable."
-            )
-        else:
-            st.write(f"Events analyzed: **{int(learning.get('total_events', 0))}**")
-            lines = learning.get("summary_lines", []) or []
-            for idx, line in enumerate(lines, start=1):
-                st.write(f"{idx}. {line}")
-
-            action_perf = learning.get("recommendation_type_performance", pd.DataFrame())
-            if isinstance(action_perf, pd.DataFrame) and not action_perf.empty:
-                st.markdown("**Which Recommendation Types Worked**")
-                display_cols = [
-                    "action_type",
-                    "total",
-                    "won",
-                    "win_rate",
-                    "positive_rate",
-                    "avg_priority",
-                    "avg_churn",
-                    "avg_credit",
-                ]
-                action_cols = [c for c in display_cols if c in action_perf.columns]
-                st.dataframe(
-                    action_perf[action_cols],
-                    column_config={
-                        "action_type": "Recommendation Type",
-                        "win_rate": st.column_config.NumberColumn("Win Rate", format="%.2f"),
-                        "positive_rate": st.column_config.NumberColumn("Positive Rate", format="%.2f"),
-                        "avg_priority": st.column_config.NumberColumn("Avg Priority", format="%.2f"),
-                        "avg_churn": st.column_config.NumberColumn("Avg Churn", format="%.3f"),
-                        "avg_credit": st.column_config.NumberColumn("Avg Credit Risk", format="%.3f"),
-                    },
-                    use_container_width=True,
-                    hide_index=True,
-                )
-
-            msg_perf = learning.get("messaging_style_performance", pd.DataFrame())
-            if isinstance(msg_perf, pd.DataFrame) and not msg_perf.empty:
-                st.markdown("**Which Messaging Style Converted Better**")
-                msg_cols = [c for c in ["tone", "channel", "total", "won", "win_rate", "positive_rate"] if c in msg_perf.columns]
-                st.dataframe(
-                    msg_perf[msg_cols],
-                    column_config={
-                        "tone": "Tone",
-                        "channel": "Channel",
-                        "win_rate": st.column_config.NumberColumn("Win Rate", format="%.2f"),
-                        "positive_rate": st.column_config.NumberColumn("Positive Rate", format="%.2f"),
-                    },
-                    use_container_width=True,
-                    hide_index=True,
-                )
-
-            tuning = learning.get("scoring_tuning", []) or []
-            if tuning:
-                st.markdown("**What to Tune in Scoring**")
-                for idx, item in enumerate(tuning, start=1):
-                    st.write(f"{idx}. {item}")
-
-            st.markdown("**Gemini Weekly Learning Summary**")
-            if learning.get("genai_error"):
-                st.warning(learning.get("genai_error"))
-            if learning.get("genai"):
-                st.write(learning.get("genai"))
-
-    st.markdown("---")
-    st.subheader("Gemini Copilot Output")
-    if plan.get("genai_error"):
-        st.warning(plan.get("genai_error"))
-    if plan.get("genai"):
-        st.write(plan.get("genai"))

@@ -4,16 +4,22 @@ import plotly.graph_objects as go
 import streamlit as st
 import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from styles import apply_global_styles, section_header, page_caption
+from styles import apply_global_styles, section_header, page_caption, page_header, skeleton_loader
 
 
 def render(ai):
     apply_global_styles()
-    st.title("Product Lifecycle Intelligence")
-    page_caption("Track product growth velocity, detect cannibalization, and predict end-of-life timelines.")
-
-    with st.spinner("Analyzing product lifecycles..."):
-        ai.ensure_product_lifecycle()
+    page_header(
+        title="Product Lifecycle Intelligence",
+        subtitle="Track product growth velocity, detect cannibalization, and predict end-of-life timelines.",
+        icon="📈",
+        accent_color="#ec4899",
+    )
+    skel = st.empty()
+    with skel.container():
+        skeleton_loader(n_metric_cards=4, n_rows=3, label="Analyzing product lifecycles...")
+    ai.ensure_product_lifecycle()
+    skel.empty()
 
     summary = ai.get_product_velocity_summary()
     if summary.get("status") != "ok":
@@ -66,16 +72,35 @@ def render(ai):
             st.plotly_chart(fig_pie, use_container_width=True)
 
         with ch2:
-            fig_vel = px.bar(
-                velocity_df.head(25),
-                x="product_name", y="velocity_score",
+            st.markdown("<p style='text-align:center; font-weight:600; margin-bottom:0;'>Revenue vs Growth Quadrant</p>", unsafe_allow_html=True)
+            
+            quad_df = velocity_df.copy()
+            # Ensure safe numerical values for plotting
+            quad_df["avg_monthly_revenue"] = quad_df["avg_monthly_revenue"].fillna(0)
+            quad_df["growth_3m_pct"] = quad_df["growth_3m_pct"].fillna(0)
+            
+            med_rev = quad_df["avg_monthly_revenue"].median()
+            med_growth = quad_df["growth_3m_pct"].median()
+            
+            fig_quad = px.scatter(
+                quad_df,
+                x="avg_monthly_revenue",
+                y="growth_3m_pct",
                 color="lifecycle_stage",
                 color_discrete_map=color_map,
-                title="Growth Velocity Score by Product (Top 25)",
-                labels={"velocity_score": "Velocity Score", "product_name": "Product"},
+                hover_name="product_name",
+                hover_data=["velocity_score"],
+                labels={
+                    "avg_monthly_revenue": "Avg Monthly Revenue (Rs)",
+                    "growth_3m_pct": "3M Growth (%)"
+                }
             )
-            fig_vel.update_layout(xaxis_tickangle=-45, height=350)
-            st.plotly_chart(fig_vel, use_container_width=True)
+            # Add quadrant boundaries
+            fig_quad.add_hline(y=med_growth, line_dash="dash", line_color="gray", annotation_text="Median Growth", annotation_position="top right")
+            fig_quad.add_vline(x=med_rev, line_dash="dash", line_color="gray", annotation_text="Median Revenue", annotation_position="top left")
+            
+            fig_quad.update_layout(height=350, margin=dict(l=0, r=0, t=30, b=0))
+            st.plotly_chart(fig_quad, use_container_width=True)
 
     # ------------------------------------------------------------------
     # Growth Velocity Table
@@ -95,29 +120,58 @@ def render(ai):
     if filtered.empty:
         st.info("No products match the selected filters.")
     else:
+        # Load monthly trend data for the sparkline
+        df_monthly = ai.df_product_monthly
+        if df_monthly is not None and not df_monthly.empty:
+            sparklines = df_monthly.sort_values("sale_month").groupby("product_name")["monthly_revenue"].apply(list).reset_index(name="revenue_trend")
+            filtered = filtered.merge(sparklines, on="product_name", how="left")
+
         display_cols = [c for c in [
-            "product_name", "lifecycle_stage", "velocity_score", "growth_3m_pct",
+            "product_name", "revenue_trend", "velocity_score", "growth_3m_pct",
             "slope_pct", "avg_monthly_revenue", "current_revenue", "peak_distance_pct",
             "months_since_peak", "buyer_trend", "revenue_cv",
         ] if c in filtered.columns]
-        st.dataframe(
-            filtered[display_cols],
-            column_config={
-                "product_name": "Product",
-                "lifecycle_stage": "Stage",
-                "velocity_score": st.column_config.NumberColumn("Velocity", format="%.3f"),
-                "growth_3m_pct": st.column_config.NumberColumn("3M Growth %", format="%+.1f%%"),
-                "slope_pct": st.column_config.NumberColumn("Trend Slope %", format="%+.1f%%"),
-                "avg_monthly_revenue": st.column_config.NumberColumn("Avg Monthly Rev", format="Rs %.0f"),
-                "current_revenue": st.column_config.NumberColumn("Current Rev", format="Rs %.0f"),
-                "peak_distance_pct": st.column_config.NumberColumn("From Peak %", format="%.1f%%"),
-                "months_since_peak": "Months Since Peak",
-                "buyer_trend": st.column_config.NumberColumn("Buyer Trend", format="%+.2f"),
-                "revenue_cv": st.column_config.NumberColumn("Volatility (CV)", format="%.2f"),
-            },
-            use_container_width=True,
-            hide_index=True,
-        )
+
+        # Group by Lifecycle Stage
+        color_map = {
+            "Growing": "#27ae60",
+            "Mature": "#2980b9",
+            "Plateauing": "#f39c12",
+            "Declining": "#e74c3c",
+            "End-of-Life": "#7f8c8d",
+        }
+        
+        stages_order = ["Growing", "Mature", "Plateauing", "Declining", "End-of-Life"]
+        present_stages = [s for s in stages_order if s in filtered["lifecycle_stage"].values]
+
+        for stage in present_stages:
+            stage_df = filtered[filtered["lifecycle_stage"] == stage]
+            color = color_map.get(stage, "#888")
+            
+            st.markdown(
+                f"<h4 style='color:{color}; margin-top:20px; margin-bottom:8px; border-bottom:1px solid #333; padding-bottom:4px;'>"
+                f"{stage} <span style='color:#666; font-size:14px; font-weight:normal;'>({len(stage_df)} products)</span></h4>", 
+                unsafe_allow_html=True
+            )
+            
+            st.dataframe(
+                stage_df[display_cols],
+                column_config={
+                    "product_name": "Product",
+                    "revenue_trend": st.column_config.LineChartColumn("Trend (18m)", y_min=0),
+                    "velocity_score": st.column_config.NumberColumn("Velocity", format="%.3f"),
+                    "growth_3m_pct": st.column_config.NumberColumn("3M Growth %", format="%+.1f%%"),
+                    "slope_pct": st.column_config.NumberColumn("Trend Slope %", format="%+.1f%%"),
+                    "avg_monthly_revenue": st.column_config.NumberColumn("Avg Monthly Rev", format="Rs %.0f"),
+                    "current_revenue": st.column_config.NumberColumn("Current Rev", format="Rs %.0f"),
+                    "peak_distance_pct": st.column_config.NumberColumn("From Peak %", format="%.1f%%"),
+                    "months_since_peak": "Months Since Peak",
+                    "buyer_trend": st.column_config.NumberColumn("Buyer Trend", format="%+.2f"),
+                    "revenue_cv": st.column_config.NumberColumn("Volatility (CV)", format="%.2f"),
+                },
+                use_container_width=True,
+                hide_index=True,
+            )
 
     # ------------------------------------------------------------------
     # Individual Product Trend Drilldown
@@ -274,3 +328,39 @@ def render(ai):
             )
             fig_eol.update_layout(height=400)
             st.plotly_chart(fig_eol, use_container_width=True)
+
+        # ──────────────────────────────────────────────────────
+        # Clearance Action Generator
+        # ──────────────────────────────────────────────────────
+        st.markdown("---")
+        st.subheader("🏷️ Clearance Action Generator")
+        st.caption("Instantly generate a discount bundle or liquidation deal for flagged products.")
+
+        critical_products = eol_df[eol_df["urgency"].isin(["Critical", "High"])]["product_name"].tolist() if "urgency" in eol_df.columns else []
+        if critical_products:
+            chosen_eol = st.selectbox("Select Product to Act On", critical_products, key="eol_action_product")
+            eol_row = eol_df[eol_df["product_name"] == chosen_eol].iloc[0]
+            curr_rev = float(eol_row.get("current_revenue", 0) or 0)
+            months_left = float(eol_row.get("est_months_to_zero", 0) or 0)
+
+            act1, act2, act3 = st.columns(3)
+            with act1:
+                discount_pct = st.slider("Discount %", 5, 50, 20, 5, key="eol_discount")
+                clearance_price = curr_rev * (1 - discount_pct / 100)
+                st.metric("Estimated Clearance Revenue/Mo", f"₹{clearance_price:,.0f}")
+            with act2:
+                bundle_with = st.text_input("Bundle with Product (optional)", "", key="eol_bundle")
+            with act3:
+                st.markdown("<br>", unsafe_allow_html=True)
+                if st.button("Generate Offer Script", key="eol_gen_script"):
+                    bundle_line = f" We're bundling it with **{bundle_with}** for added value." if bundle_with else ""
+                    script = (
+                        f"**Flash Deal — Limited Stock Alert!**\n\n"
+                        f"Dear Partner, we have a special **{discount_pct}% discount** on **{chosen_eol}** "
+                        f"(only ~{months_left:.0f} months of active inventory left)!{bundle_line}\n\n"
+                        f"Act fast — this offer expires when stock runs out. Contact your sales rep today!"
+                    )
+                    st.info(script)
+        else:
+            st.success("No Critical/High urgency products requiring immediate clearance action.")
+

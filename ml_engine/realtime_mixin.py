@@ -70,3 +70,8 @@ class RealtimeMixin:
                 "last_live_update": None,
                 "scored_partners": 0,
             }
+    def get_job_status(self, job_id):
+        try:
+            return self.realtime_repo.get_job_status(job_id)
+        except Exception:
+            return None

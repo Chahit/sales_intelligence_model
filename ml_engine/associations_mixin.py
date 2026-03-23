@@ -695,7 +695,7 @@ class AssociationsMixin:
     # UPGRADE 4: Cross-Category Rules
     # =================================================================
 
-    def mine_cross_category_upgrades(self, gap_days=60, min_support_count=3, min_confidence=0.1):
+    def mine_cross_category_upgrades(self, gap_days=60, min_support_count=3, min_confidence=0.05):
         """Cross-category: premium in X -> buys Y within N days."""
         from collections import defaultdict
         if self.strict_view_only:

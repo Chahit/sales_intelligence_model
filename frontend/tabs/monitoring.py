@@ -2,19 +2,28 @@ import streamlit as st
 import pandas as pd
 import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from styles import apply_global_styles, section_header, banner, page_caption
+from styles import apply_global_styles, section_header, banner, page_caption, page_header, skeleton_loader
 
 
 def render(ai):
     apply_global_styles()
-    st.title("Model Monitoring")
-    page_caption("Track data quality, model performance, and system health across all ML modules.")
-    with st.spinner("Loading diagnostics..."):
-        ai.ensure_clustering()
-        if ai.enable_realtime_partner_scoring:
-            ai.ensure_churn_forecast()
-            ai.ensure_credit_risk()
-        ai.ensure_associations()
+    page_header(
+        title="AI Churn Engine",
+        subtitle="Manage predictions, model performance, and data quality diagnostics.",
+        icon="🧠",
+        accent_color="#06b6d4",
+        badge_text="Live",
+        badge_color="#064e3b",
+    )
+    skel = st.empty()
+    with skel.container():
+        skeleton_loader(n_metric_cards=4, n_rows=2, label="Loading diagnostics...")
+    ai.ensure_clustering()
+    if ai.enable_realtime_partner_scoring:
+        ai.ensure_churn_forecast()
+        ai.ensure_credit_risk()
+    ai.ensure_associations()
+    skel.empty()
 
     snapshot = ai.get_monitoring_snapshot()
     dq = ai.get_data_quality_report()
@@ -77,9 +86,9 @@ def render(ai):
 
     r1, r2 = st.columns(2)
     with r1:
-        if st.button("Queue Full Recompute"):
-            n = ai.queue_recompute_all(reason="manual_full")
-            st.success(f"Queued {int(n)} partner jobs.")
+        if st.button("Run All Predictions"):
+            n = ai.queue_recompute_all(reason="manual_all_predictions")
+            st.success(f"Queued {int(n)} partner predictions.")
     with r2:
         selected_partner = None
         if ai.matrix is not None and not ai.matrix.empty:

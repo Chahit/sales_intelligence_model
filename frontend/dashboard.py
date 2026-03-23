@@ -1,4 +1,6 @@
 import os
+# Fix for KMeans cluster issue on Windows
+os.environ["OMP_NUM_THREADS"] = "1"
 import sys
 
 import streamlit as st
@@ -13,10 +15,9 @@ from styles import apply_global_styles
 # Import Tabs
 from tabs import (
     clustering,
-    competitor_intel,
     inventory,
+    kanban_pipeline,
     market_basket,
-    monitoring,
     partner_360,
     product_lifecycle,
     recommendation_hub,
@@ -63,34 +64,147 @@ except Exception as e:
     st.stop()
 
 
-# --- SIDEBAR ---
+# ── NAV CONFIG ────────────────────────────────────────────────────────────────
+_NAV_ITEMS = [
+    ("🤝", "Partner 360 View",         "Deep-dive on any partner"),
+    ("📊", "Revenue Pipeline Tracker", "Deal stages & pipeline health"),
+    ("🛒", "Product Bundles (MBA)",    "Market basket analysis"),
+    ("📦", "Inventory Liquidation",    "Ageing stock & clearance"),
+    ("🔬", "Cluster Intelligence",     "Customer segmentation"),
+    ("🔄", "Product Lifecycle",        "Stage & trend tracking"),
+    ("💡", "Recommendation Hub",       "AI-driven cross-sell"),
+    ("💼", "Sales Rep Performance",    "Rep ROI & territory view"),
+]
+
+# Initialise active page
+if "active_page" not in st.session_state:
+    st.session_state.active_page = _NAV_ITEMS[0][1]
+
+# ── SIDEBAR HEADER ─────────────────────────────────────────────────────────────
 st.sidebar.markdown(
-    "<div style='padding:10px 0 4px 0'>"
-    "<span style='font-size:18px;font-weight:700;color:#fff;letter-spacing:0.02em'>Consistent AI</span>"
-    "<br><span style='font-size:11px;color:#666;'>Sales Intelligence Suite</span>"
-    "</div>",
+    "<div style='padding:16px 4px 6px 4px'>"
+    "<div style='display:flex;align-items:center;gap:10px;'>"
+    "<div style='width:34px;height:34px;background:linear-gradient(135deg,#2563eb,#7c3aed);"
+    "border-radius:8px;display:flex;align-items:center;justify-content:center;"
+    "font-size:16px;'>🧠</div>"
+    "<div><div style='font-size:15px;font-weight:700;color:#f1f5f9;letter-spacing:0.02em'>Consistent AI</div>"
+    "<div style='font-size:10px;color:#64748b;letter-spacing:0.06em;text-transform:uppercase;'>Sales Intelligence Suite</div>"
+    "</div></div></div>",
     unsafe_allow_html=True,
 )
-st.sidebar.markdown("---")
 
-if st.sidebar.button("⟳ Refresh Data"):
+# ── NAV CARD CSS ───────────────────────────────────────────────────────────────
+st.sidebar.markdown("""
+<style>
+/* ── Sidebar background ─────────────────────────────────────────────── */
+[data-testid="stSidebar"] > div:first-child {
+    background: #0c0c10 !important;
+    border-right: 1px solid #1e1e2e !important;
+}
+section[data-testid="stSidebar"] {
+    background: #0c0c10 !important;
+}
+
+/* ── Hide default radio completely ─────────────────────────────────── */
+[data-testid="stSidebar"] [data-testid="stRadio"] { display:none !important; }
+
+/* ── Nav card buttons ───────────────────────────────────────────────── */
+[data-testid="stSidebar"] .stButton > button {
+    width: 100% !important;
+    background: transparent !important;
+    border: 1px solid transparent !important;
+    border-radius: 10px !important;
+    padding: 10px 12px !important;
+    margin-bottom: 2px !important;
+    text-align: left !important;
+    color: #94a3b8 !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    transition: all 0.18s ease !important;
+    cursor: pointer !important;
+    display: flex !important;
+    align-items: center !important;
+    gap: 10px !important;
+    line-height: 1.3 !important;
+    white-space: normal !important;
+    height: auto !important;
+    min-height: 48px !important;
+    box-shadow: none !important;
+}
+[data-testid="stSidebar"] .stButton > button:hover {
+    background: rgba(37,99,235,0.1) !important;
+    border-color: rgba(37,99,235,0.25) !important;
+    color: #e2e8f0 !important;
+    transform: translateX(2px) !important;
+}
+[data-testid="stSidebar"] .stButton > button:focus {
+    box-shadow: none !important;
+    outline: none !important;
+}
+
+/* ── Active nav card ──────────────────────────────────────────────── */
+[data-testid="stSidebar"] .nav-active > button {
+    background: linear-gradient(135deg,rgba(37,99,235,0.22),rgba(124,58,237,0.12)) !important;
+    border-color: rgba(37,99,235,0.45) !important;
+    color: #e2e8f0 !important;
+    font-weight: 600 !important;
+}
+
+/* ── Divider label ─────────────────────────────────────────────────── */
+.nav-section-label {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.12em;
+    color: #374151;
+    padding: 12px 12px 4px;
+}
+
+/* ── Refresh button special style ─────────────────────────────────── */
+[data-testid="stSidebar"] .nav-refresh > button {
+    background: rgba(16,185,129,0.08) !important;
+    border-color: rgba(16,185,129,0.2) !important;
+    color: #6ee7b7 !important;
+    font-size: 12px !important;
+    min-height: 36px !important;
+    justify-content: center !important;
+    text-align: center !important;
+}
+[data-testid="stSidebar"] .nav-refresh > button:hover {
+    background: rgba(16,185,129,0.18) !important;
+    border-color: rgba(16,185,129,0.4) !important;
+    transform: none !important;
+}
+/* ── Hide extra Streamlit sidebar chrome ───────────────────────────── */
+[data-testid="stSidebar"] hr { border-color: #1e1e2e !important; margin: 6px 0 !important; }
+[data-testid="stSidebarCollapsedControl"] { display:none !important; }
+</style>
+""", unsafe_allow_html=True)
+
+# ── REFRESH BUTTON ─────────────────────────────────────────────────────────────
+st.sidebar.markdown('<div class="nav-refresh">', unsafe_allow_html=True)
+if st.sidebar.button("⟳  Refresh Data", key="nav_refresh"):
     st.cache_resource.clear()
     st.rerun()
+st.sidebar.markdown('</div>', unsafe_allow_html=True)
 
-nav = st.sidebar.radio(
-    "Module",
-    [
-        "Partner 360 View",
-        "Product Bundles (MBA)",
-        "Inventory Liquidation",
-        "Cluster Intelligence",
-        "Product Lifecycle",
-        "Recommendation Hub",
-        "Competitor Intelligence",
-        "Model Monitoring",
-        "Sales Rep Performance",
-    ],
-)
+st.sidebar.markdown('<div class="nav-section-label">Modules</div>', unsafe_allow_html=True)
+
+# ── NAV CARDS ─────────────────────────────────────────────────────────────────
+for _icon, _label, _desc in _NAV_ITEMS:
+    _is_active = st.session_state.active_page == _label
+    _css_class = "nav-active" if _is_active else "nav-inactive"
+    st.sidebar.markdown(f'<div class="{_css_class}">', unsafe_allow_html=True)
+    if st.sidebar.button(
+        f"{_icon}  {_label}",
+        key=f"nav_{_label}",
+        help=_desc,
+    ):
+        st.session_state.active_page = _label
+        st.rerun()
+    st.sidebar.markdown("</div>", unsafe_allow_html=True)
+
+nav = st.session_state.active_page
 
 
 # --- CHAT STATE ---
@@ -385,6 +499,8 @@ st.markdown("""
 # --- ROUTING LOGIC ---
 if nav == "Partner 360 View":
     partner_360.render(ai)
+elif nav == "Revenue Pipeline Tracker":
+    kanban_pipeline.render(ai)
 elif nav == "Product Bundles (MBA)":
     market_basket.render(ai)
 elif nav == "Inventory Liquidation":
@@ -395,9 +511,5 @@ elif nav == "Product Lifecycle":
     product_lifecycle.render(ai)
 elif nav == "Recommendation Hub":
     recommendation_hub.render(ai)
-elif nav == "Competitor Intelligence":
-    competitor_intel.render(ai)
-elif nav == "Model Monitoring":
-    monitoring.render(ai)
 elif nav == "Sales Rep Performance":
     sales_rep_performance.render(ai)

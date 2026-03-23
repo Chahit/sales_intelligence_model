@@ -1,5 +1,7 @@
 import streamlit as st
 import pandas as pd
+import time
+import re
 
 import sys, os
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..")))
@@ -8,15 +10,22 @@ from ml_engine.services.export_service import (
     export_partner_360_excel,
 )
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from styles import apply_global_styles, section_header, status_badge, banner, health_color, churn_color, page_caption
+from styles import apply_global_styles, section_header, status_badge, banner, health_color, churn_color, page_caption, page_header, skeleton_loader
 
 
 def render(ai):
     apply_global_styles()
-    st.title("Partner 360 Analysis")
-    page_caption("Deep-dive into any partner — revenue health, churn risk, forecast, and recommendations.")
-    with st.spinner("Loading partner intelligence..."):
-        ai.ensure_clustering()
+    page_header(
+        title="Partner 360 View",
+        subtitle="Deep-dive into any partner — revenue health, churn risk, forecast, and recommendations.",
+        icon="🤝",
+        accent_color="#2563eb",
+    )
+    skel = st.empty()
+    with skel.container():
+        skeleton_loader(n_metric_cards=4, n_rows=3, label="Loading partner intelligence...")
+    ai.ensure_clustering()
+    skel.empty()
 
     all_states = sorted(ai.matrix["state"].dropna().unique())
     selected_state = st.selectbox("Step 1: Select State/Region", all_states)
@@ -55,7 +64,6 @@ def render(ai):
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             key="p360_xlsx",
         )
-    st.markdown("---")
 
     facts = report["facts"]
     gaps = report["gaps"]
@@ -102,6 +110,15 @@ def render(ai):
     outstanding_amt = float(facts.get("outstanding_amount", 0))
     credit_adjusted_risk = float(facts.get("credit_adjusted_risk_value", 0))
 
+    # ── ₹ formatter (₹12.3L / ₹4.5K / ₹4.5Cr) ──────────────────────────────
+    def _fmt(v):
+        try: v = float(v)
+        except Exception: return "₹0"
+        if v >= 1_00_00_000: return f"₹{v/1_00_00_000:.1f}Cr"
+        if v >= 1_00_000:    return f"₹{v/1_00_000:.1f}L"
+        if v >= 1_000:       return f"₹{v/1_000:.0f}K"
+        return f"₹{v:.0f}"
+
     # ── Status Banner ───────────────────────────────────────────────────────
     color = health_color(status)
     churn_c = churn_color(churn_prob)
@@ -115,36 +132,49 @@ def render(ai):
         unsafe_allow_html=True,
     )
 
-    # ── Section 1: Revenue Health ────────────────────────────────────────────
+    st.markdown(
+        f"<div class='ui-section'>",
+        unsafe_allow_html=True,
+    )
     section_header("Revenue Health")
     c1, c2, c3, c4 = st.columns(4)
     with c1:
         st.metric("Revenue Drop", f"{drop:.1f}%", delta=f"-{drop:.1f}%", delta_color="inverse")
     with c2:
-        st.metric("Unlocked Potential (Yearly)", f"Rs {int(total_pot_yearly):,}",
-                  delta=f"Monthly Rs {int(total_pot_monthly):,}", delta_color="off")
+        st.metric("Unlocked Potential (Yearly)", _fmt(total_pot_yearly),
+                  delta=f"Monthly {_fmt(total_pot_monthly)}", delta_color="off")
     with c3:
         st.metric("Health Score", f"{health_score:.2f}")
     with c4:
-        st.metric("Est. Monthly Loss", f"Rs {int(est_monthly_loss):,}")
+        st.metric("Est. Monthly Loss", _fmt(est_monthly_loss))
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    # ── Section 2: Churn & Forecast ──────────────────────────────────────────
+    # ── Section 2: Churn & Forecast ─────────────────────────────────────────
+    st.markdown(
+        f"<div class='ui-section'>",
+        unsafe_allow_html=True,
+    )
     section_header("Churn & Forecast")
     c5, c6, c7, c8 = st.columns(4)
     with c5:
         st.metric("Churn Probability", f"{churn_prob * 100:.1f}%")
         st.caption(f"Risk Band: {churn_band}")
     with c6:
-        st.metric("Revenue At Risk (90d)", f"Rs {int(risk_90d):,}",
-                  delta=f"Monthly Rs {int(risk_monthly):,}", delta_color="off")
+        st.metric("Revenue At Risk (90d)", _fmt(risk_90d),
+                  delta=f"Monthly {_fmt(risk_monthly)}", delta_color="off")
     with c7:
-        st.metric("Forecast Next 30d", f"Rs {int(fc_next_30d):,}",
+        st.metric("Forecast Next 30d", _fmt(fc_next_30d),
                   delta=f"Trend {fc_trend_pct:+.1f}%", delta_color="normal")
         st.caption(f"Confidence: {fc_conf:.2f}")
     with c8:
         st.metric("Last Activity", f"{recency_days}d ago")
+    st.markdown("</div>", unsafe_allow_html=True)
 
     # ── Section 3: Credit Risk ───────────────────────────────────────────────
+    st.markdown(
+        f"<div class='ui-section'>",
+        unsafe_allow_html=True,
+    )
     section_header("Credit Risk")
     cr1, cr2, cr3, cr4 = st.columns(4)
     with cr1:
@@ -153,68 +183,15 @@ def render(ai):
         st.caption(f"Utilization: {credit_util * 100:.1f}% | Overdue: {overdue_ratio * 100:.1f}%")
     with cr2:
         st.metric("Outstanding + Adj Risk",
-            f"Rs {int(outstanding_amt):,}",
-            delta=f"Adj Risk Rs {int(credit_adjusted_risk):,}",
+            _fmt(outstanding_amt),
+            delta=f"Adj Risk {_fmt(credit_adjusted_risk)}",
             delta_color="off",
         )
+    st.markdown("</div>", unsafe_allow_html=True)
 
-    section_header("Churn Risk Explainability & Survival")
-    try:
-        shap_result = ai.explain_partner_churn(selected_partner)
-        surv_result = ai.predict_partner_survival(selected_partner)
-        shap_ok = shap_result.get("status") == "ok"
-        surv_ok = surv_result.get("status") == "ok"
-
-        if shap_ok or surv_ok:
-            sa1, sa2 = st.columns(2)
-            if shap_ok:
-                with sa1:
-                    st.markdown("**Churn Risk Factors (SHAP)**")
-                    top_factors = shap_result.get("top_risk_factors", [])
-                    contribs = shap_result.get("feature_contributions", {})
-                    if top_factors:
-                        for factor in top_factors:
-                            st.write(f"— {factor}")
-                    if contribs:
-                        with st.expander("Full Feature Contributions", expanded=False):
-                            contrib_rows = [
-                                {
-                                    "Feature": k,
-                                    "SHAP Value": v["shap_value"],
-                                    "Feature Value": v["feature_value"],
-                                    "Direction": v["direction"],
-                                }
-                                for k, v in contribs.items()
-                            ]
-                            st.dataframe(
-                                pd.DataFrame(contrib_rows),
-                                use_container_width=True,
-                                hide_index=True,
-                            )
-            if surv_ok:
-                with sa2:
-                    st.markdown("**Survival Analysis**")
-                    median_days = surv_result.get("predicted_median_days_to_churn")
-                    risk_text = surv_result.get("risk_assessment", "")
-                    surv_probs = surv_result.get("survival_probabilities", {})
-                    if median_days is not None:
-                        st.metric("Predicted Days to Churn", f"{int(median_days)} days")
-                    if risk_text:
-                        color = "red" if "CRITICAL" in risk_text else ("orange" if "HIGH" in risk_text else "green")
-                        st.markdown(f":{color}[**{risk_text}**]")
-                    if surv_probs:
-                        surv_rows = [
-                            {"Horizon": k.replace("_", " ").title(), "Survival Probability": f"{v * 100:.1f}%"}
-                            for k, v in surv_probs.items()
-                        ]
-                        st.dataframe(pd.DataFrame(surv_rows), use_container_width=True, hide_index=True)
-        # If neither is available, show nothing (no "train model first" message)
-    except Exception:
-        pass  # Silently skip — churn model not trained
-
-    st.markdown("---")
 
     left, right = st.columns([1, 1.5])
+
     with left:
         st.subheader("Retention Strategy")
         pitch = facts.get("top_affinity_pitch", None)
@@ -250,43 +227,155 @@ def render(ai):
             st.error(f"Action: {status}")
 
     with right:
-        st.subheader("Peer Gap Analysis")
+        st.subheader("Peer Gap Analysis (Cross-Sell)")
         if not gaps.empty:
             st.write(f"Comparisons against **{cluster_name}** peers:")
-            st.dataframe(
-                gaps[
-                    [
-                        "Product",
-                        "Potential_Revenue_Monthly",
-                        "Potential_Revenue_Yearly",
-                        "You_Do_Pct",
-                        "Others_Do_Pct",
-                        "Peer_Avg_Spend",
-                    ]
-                ],
-                column_config={
-                    "Product": "Missing Category",
-                    "Potential_Revenue_Monthly": st.column_config.NumberColumn(
-                        "Monthly Gap", format="Rs %d"
-                    ),
-                    "Potential_Revenue_Yearly": st.column_config.NumberColumn(
-                        "Yearly Gap", format="Rs %d"
-                    ),
-                    "You_Do_Pct": st.column_config.NumberColumn(
-                        "You Do", format="%.1f%%"
-                    ),
-                    "Others_Do_Pct": st.column_config.NumberColumn(
-                        "Others Do", format="%.1f%%"
-                    ),
-                    "Peer_Avg_Spend": st.column_config.NumberColumn(
-                        "Cluster Avg", format="Rs %d"
-                    ),
-                },
-                use_container_width=True,
-                hide_index=True,
-            )
+
+            def _gap_fmt(v):
+                try: v = float(v)
+                except Exception: return "₹0"
+                if v >= 1_00_00_000: return f"₹{v/1_00_00_000:.1f}Cr"
+                if v >= 1_00_000:    return f"₹{v/1_00_000:.1f}L"
+                if v >= 1_000:       return f"₹{v/1_000:.0f}K"
+                return f"₹{v:.0f}"
+
+            disp = gaps.copy()
+            disp["Gap_Val_Monthly"] = disp["Potential_Revenue_Monthly"].fillna(0).astype(float)
+            disp["Gap (Monthly)"]  = disp["Potential_Revenue_Monthly"].apply(_gap_fmt)
+            disp["Gap (Yearly)"]   = disp["Potential_Revenue_Yearly"].apply(_gap_fmt)
+            disp["Peer Avg Spend"] = disp["Peer_Avg_Spend"].apply(_gap_fmt)
+            disp["You Do"]         = disp["You_Do_Pct"].apply(lambda x: f"{float(x):.1f}%" if pd.notna(x) else "0%")
+            disp["Peers Do"]       = disp["Others_Do_Pct"].apply(lambda x: f"{float(x):.1f}%" if pd.notna(x) else "0%")
+
+            show = disp[["Product", "Gap_Val_Monthly", "Gap (Monthly)", "Gap (Yearly)", "You Do", "Peers Do", "Peer Avg Spend"]].sort_values("Gap_Val_Monthly", ascending=False)
+
+            high_gaps = show[show["Gap_Val_Monthly"] >= 50000].drop(columns=["Gap_Val_Monthly"])
+            med_gaps = show[(show["Gap_Val_Monthly"] >= 10000) & (show["Gap_Val_Monthly"] < 50000)].drop(columns=["Gap_Val_Monthly"])
+            low_gaps = show[show["Gap_Val_Monthly"] < 10000].drop(columns=["Gap_Val_Monthly"])
+
+            if not high_gaps.empty:
+                st.markdown("#### 🔥 High Priority (>&nbsp;₹50K/mo)")
+                st.dataframe(high_gaps, use_container_width=True, hide_index=True)
+            if not med_gaps.empty:
+                st.markdown("#### ⚡ Medium Priority (>&nbsp;₹10K/mo)")
+                st.dataframe(med_gaps, use_container_width=True, hide_index=True)
+            if not low_gaps.empty:
+                with st.expander("Explore Low Priority Gaps (<&nbsp;₹10K/mo)"):
+                    st.dataframe(low_gaps, use_container_width=True, hide_index=True)
         else:
             if any(tag in str(cluster_name) for tag in ("Outlier", "Uncategorized")):
                 st.warning("Partner is uncategorized (unique buying pattern).")
             else:
                 st.success("Perfect account. Matches peer average.")
+
+    # ── SPIN Selling Script ─────────────────────────────────────────────────
+    section_header("SPIN Selling Script")
+
+    _state_str = str(facts.get("state", "your region") or "your region")
+    missing_cat = str(gaps.iloc[0]["Product"]) if not gaps.empty else "a key product category"
+    top_gap_monthly = _fmt(total_pot_monthly) if total_pot_monthly > 0 else None
+
+    # ── Situation: what we actually know about this partner ──────────────────
+    recency_txt = (
+        f"their last order was {recency_days} days ago"
+        if recency_days > 30
+        else "they've been ordering regularly"
+    )
+    spin_s = (
+        f"When you speak with them, open with what you already know — {recency_txt}, "
+        f"they're classified as a <b>{cluster_type}</b> account, and they've been buying "
+        f"mostly in the <b>{cluster_name}</b> segment. "
+        f"Ask something like: <i>\"You've been with us for a while now — how's business been "
+        f"holding up in {_state_str} this quarter? Any pressure from your customers on pricing or availability?\"</i>"
+    )
+
+    # ── Problem: grounded in real transaction data ───────────────────────────
+    if drop > 5:
+        spin_p = (
+            f"Their orders have dropped <b>{drop:.1f}%</b> in the last 90 days. "
+            f"Don't call it out bluntly — instead ask: <i>\"We noticed a bit of a shift in your "
+            f"order pattern over the past few months. Have you been adjusting inventory levels, "
+            f"or is there something happening on the demand side with your end customers?\"</i>"
+        )
+    elif not gaps.empty:
+        spin_p = (
+            f"Similar partners in the same cluster regularly stock <b>{missing_cat}</b>, "
+            f"but this partner hasn't picked it up. Try: <i>\"Your peers in the same region have "
+            f"been doing well with {missing_cat} — have you had a chance to test that with your "
+            f"customers, or is there a reason it hasn't fit your range yet?\"</i>"
+        )
+    else:
+        spin_p = (
+            f"Things look stable, but probe for hidden friction: "
+            f"<i>\"Most distributors we speak with right now are managing tighter credit cycles and "
+            f"slower-moving stock. Is that something affecting your cash flow or ordering decisions at the moment?\"</i>"
+        )
+
+    # ── Implication: connect the gap to real business consequence ────────────
+    if top_gap_monthly and total_pot_yearly > 10000:
+        spin_i = (
+            f"This isn't abstract — the numbers show a potential <b>{_fmt(total_pot_yearly)}/year</b> "
+            f"left on the table. Land it like this: <i>\"If partners similar to you are generating "
+            f"an extra {top_gap_monthly} a month from {missing_cat}, and you're not in that space yet — "
+            f"over a year that's a real gap. What does that kind of revenue mean for your business?\"</i>"
+        )
+    elif churn_prob > 0.5:
+        spin_i = (
+            f"Churn risk is elevated at <b>{churn_prob*100:.0f}%</b>. Make it tangible: "
+            f"<i>\"When partners slow down this much, we often see them consolidate suppliers — "
+            f"and the first ones cut are usually the ones they've had the least recent contact with. "
+            f"Is that a concern on your side, or am I reading it wrong?\"</i>"
+        )
+    else:
+        spin_i = (
+            f"Keep it forward-looking: <i>\"Right now your numbers are solid, but the "
+            f"distributors who build the most resilience are the ones who diversify their "
+            f"product basket early — before demand forces them to. What categories are you "
+            f"looking to grow in the next two quarters?\"</i>"
+        )
+
+    # ── Need-Payoff: specific, outcome-focused close ─────────────────────────
+    credit_txt = (
+        f" We can also look at adjusting credit terms to free up working capital."
+        if credit_score > 0.3
+        else ""
+    )
+    spin_n = (
+        f"Close on a concrete action, not a vague offer: "
+        f"<i>\"Let's set you up with a trial allocation of {missing_cat} for next month — "
+        f"no minimum commitment. If it moves, we lock in a priority schedule so you're "
+        f"never out of stock when your customers ask for it.{credit_txt} Does that work for you?\"</i>"
+    )
+
+    # ── Render ───────────────────────────────────────────────────────────────
+    for icon, label, color, body in [
+        ("S", "Situation",   "#3b82f6", spin_s),
+        ("P", "Problem",     "#ef4444", spin_p),
+        ("I", "Implication", "#f59e0b", spin_i),
+        ("N", "Need-Payoff", "#10b981", spin_n),
+    ]:
+        st.markdown(
+            f"""
+            <div style="display:flex;gap:14px;align-items:flex-start;
+                        margin-bottom:20px;padding:16px 20px;
+                        background:rgba(255,255,255,0.02);
+                        border:1px solid rgba(255,255,255,0.06);
+                        border-radius:10px;">
+                <div style="flex-shrink:0;width:32px;height:32px;
+                            background:{color};border-radius:50%;
+                            display:flex;align-items:center;justify-content:center;
+                            font-weight:700;font-size:14px;color:#fff;">{icon}</div>
+                <div>
+                    <div style="font-weight:600;font-size:13px;color:{color};
+                                text-transform:uppercase;letter-spacing:0.06em;
+                                margin-bottom:6px;">{label}</div>
+                    <div style="font-size:14px;line-height:1.7;color:#d1d5db;">{body}</div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+    st.markdown("<div style='height: 24px;'></div>", unsafe_allow_html=True)
+
+

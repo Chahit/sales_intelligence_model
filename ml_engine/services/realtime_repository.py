@@ -216,3 +216,11 @@ class RealtimeRepository:
                 "last_live_update": None,
                 "scored_partners": 0,
             }
+
+    def get_job_status(self, job_id):
+        query = text("SELECT status, error_message FROM score_recompute_jobs WHERE id = :job_id")
+        with self.engine.begin() as conn:
+            row = conn.execute(query, {"job_id": int(job_id)}).first()
+        if row:
+            return {"status": row[0], "error": row[1]}
+        return None

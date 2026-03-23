@@ -6,16 +6,14 @@ from sqlalchemy import create_engine
 
 from .associations_mixin import AssociationsMixin
 from .base_loader_mixin import BaseLoaderMixin
-from .churn_credit_mixin import ChurnCreditMixin
+from .churn_credit_stub_mixin import ChurnCreditStubMixin
 from .clustering_mixin import ClusteringMixin
-from .competitor_mixin import CompetitorMixin
 from .monitoring_mixin import MonitoringMixin
 from .product_lifecycle_mixin import ProductLifecycleMixin
 from .recommendation_mixin import RecommendationMixin
 from .services.data_repository import DataRepository
 from .services.realtime_repository import RealtimeRepository
 from .services.cluster_governance_repository import ClusterGovernanceRepository
-from .services.competitor_repository import CompetitorRepository
 from .realtime_mixin import RealtimeMixin
 from .chatbot_mixin import ChatbotMixin
 from .sales_rep_mixin import SalesRepMixin
@@ -23,13 +21,12 @@ from .sales_rep_mixin import SalesRepMixin
 
 class SalesIntelligenceEngine(
     BaseLoaderMixin,
-    ChurnCreditMixin,
+    ChurnCreditStubMixin,
     ClusteringMixin,
     AssociationsMixin,
     RecommendationMixin,
     RealtimeMixin,
     MonitoringMixin,
-    CompetitorMixin,
     ProductLifecycleMixin,
     ChatbotMixin,
     SalesRepMixin,
@@ -79,7 +76,6 @@ class SalesIntelligenceEngine(
         self.repo = DataRepository(self.engine)
         self.realtime_repo = RealtimeRepository(self.engine)
         self.cluster_repo = ClusterGovernanceRepository(self.engine)
-        self.competitor_repo = CompetitorRepository(self.engine)
 
         self.df_ml = None
         self.df_fact = None

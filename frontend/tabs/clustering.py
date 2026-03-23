@@ -11,15 +11,23 @@ from ml_engine.services.export_service import (
     export_cluster_summary_excel,
 )
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
-from styles import apply_global_styles, section_header, page_caption, banner
+from styles import apply_global_styles, section_header, page_caption, banner, page_header, skeleton_loader
 
 
 def render(ai):
     apply_global_styles()
-    st.title("Cluster Intelligence")
-    page_caption("AI-generated partner segments based on buying behaviour, RFM signals, and category mix.")
-    with st.spinner("Computing clusters..."):
-        ai.ensure_clustering()
+    page_header(
+        title="Cluster Intelligence",
+        subtitle="AI-generated partner segments based on buying behaviour, RFM signals, and category mix.",
+        icon="🧠",
+        accent_color="#8b5cf6",
+        badge_text="HDBSCAN + GMM",
+    )
+    skel = st.empty()
+    with skel.container():
+        skeleton_loader(n_metric_cards=4, n_rows=3, label="Running clustering engine...")
+    ai.ensure_clustering()
+    skel.empty()
 
     matrix = ai.matrix.copy()
     if matrix is None or matrix.empty:
@@ -169,16 +177,34 @@ def render(ai):
     plot_df["Strategic Tag"] = filtered["strategic_tag"].astype(str)
     plot_df["State"] = filtered["state"].astype(str) if "state" in filtered.columns else "Unknown"
 
-    fig = px.scatter_3d(
-        plot_df,
-        x="x",
-        y="y",
-        z="z",
-        color="Cluster",
-        symbol="Cluster Type",
-        hover_name="Partner",
-        hover_data=["State", "Strategic Tag"],
-        title="Partner DNA Map (Color = Cluster Label, Symbol = Cluster Type)",
-        color_discrete_sequence=px.colors.qualitative.Bold,
-    )
-    st.plotly_chart(fig, use_container_width=True)
+    col_map, col_comp = st.columns([2, 1])
+
+    with col_map:
+        fig = px.scatter_3d(
+            plot_df,
+            x="x",
+            y="y",
+            z="z",
+            color="Cluster",
+            symbol="Cluster Type",
+            hover_name="Partner",
+            hover_data=["State", "Strategic Tag"],
+            title="Partner DNA Map",
+            color_discrete_sequence=px.colors.qualitative.Bold,
+        )
+        fig.update_layout(height=450, margin=dict(l=0, r=0, b=0, t=30))
+        st.plotly_chart(fig, use_container_width=True)
+    
+    with col_comp:
+        comp_df = plot_df.groupby(["Cluster", "Cluster Type"]).size().reset_index(name="Count")
+        fig_comp = px.bar(
+            comp_df, x="Cluster", y="Count", color="Cluster Type",
+            title="Composition Breakdown",
+            barmode="stack",
+            color_discrete_sequence=px.colors.qualitative.Pastel
+        )
+        fig_comp.update_layout(height=450, margin=dict(l=0, r=0, b=0, t=40))
+        st.plotly_chart(fig_comp, use_container_width=True)
+
+
+

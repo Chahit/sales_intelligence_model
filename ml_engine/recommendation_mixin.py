@@ -786,17 +786,18 @@ class RecommendationMixin:
             "candidate_partners": int(len(candidates)),
         }
 
-    def _lookup_offer_pricing(self, offer_name):
-        offer = str(offer_name or "").strip()
-        if not offer:
+    def _lookup_offer_pricing(self, offer, partner_name=None):
+        if not offer or not self.engine:
             return {
-                "offer_name": "Recommended Offer",
+                "offer_name": offer or "Unknown",
                 "unit_price": np.nan,
                 "margin_rate": 0.15,
-                "safe_discount_pct": 5.0,
+                "safe_discount_pct": 0.0,
                 "offer_price": np.nan,
+                "elasticity_signal": "Unknown",
             }
 
+        # Modify SQL to fetch basic price/margin + elasticity metrics via Materialized View
         query = text(
             """
             WITH max_date_cte AS (
@@ -825,10 +826,15 @@ class RecommendationMixin:
                         ELSE NULL
                     END
                 ) AS avg_margin_rate,
-                AVG(COALESCE(NULLIF(tp.transfer_price, 0), msp.transfer_price)) AS avg_transfer_price
+                AVG(COALESCE(NULLIF(tp.transfer_price, 0), msp.transfer_price)) AS avg_transfer_price,
+                MAX(mv.volume_cv) as volume_cv,
+                MAX(mv.price_cv) as price_cv
             FROM transactions_dsr t
             JOIN transactions_dsr_products tp ON t.id = tp.dsr_id
             JOIN master_products p ON tp.product_id = p.id
+            LEFT JOIN mv_product_elasticity_stats mv 
+                ON mv.product_name = p.product_name 
+                AND mv.partner_name = :partner_name
             LEFT JOIN LATERAL (
                 SELECT m.transfer_price
                 FROM master_product_selling_price m
@@ -845,9 +851,10 @@ class RecommendationMixin:
             )
         )
 
+
         row = {}
         try:
-            q = pd.read_sql(query, self.engine, params={"offer_name": offer})
+            q = pd.read_sql(query, self.engine, params={"offer_name": offer, "partner_name": partner_name})
             if not q.empty:
                 row = q.iloc[0].to_dict()
         except Exception:
@@ -864,16 +871,30 @@ class RecommendationMixin:
             margin_rate = 0.15
         margin_rate = float(np.clip(margin_rate, 0.02, 0.60))
 
-        if margin_rate >= 0.30:
-            safe_discount = 12.0
-        elif margin_rate >= 0.22:
-            safe_discount = 9.0
-        elif margin_rate >= 0.16:
-            safe_discount = 6.0
-        elif margin_rate >= 0.12:
-            safe_discount = 4.0
+        # Dynamic Price Elasticity of Demand (PED) Calculation
+        # PED = % Change in Quantity / % Change in Price (approximated here via Coefficients of Variation)
+        vol_cv = float(row.get("volume_cv", np.nan) or 0.0)
+        price_cv = float(row.get("price_cv", np.nan) or 0.0)
+        
+        elasticity_score = 1.0 # Neutral assumption
+        if pd.notna(vol_cv) and pd.notna(price_cv) and price_cv > 0.01:
+            elasticity_score = vol_cv / price_cv
+
+        # Determine strategy based on elasticity and ceiling the discount against absolute margin
+        elasticity_signal = "Neutral Demand"
+        if elasticity_score > 1.2:
+            # Highly elastic: Demand spikes with price drops. Okay to offer higher discount to drive volume.
+            elasticity_signal = "Highly Elastic (Maximize Discount)"
+            safe_discount = min(15.0, margin_rate * 100 * 0.7) # Give up to 70% of margin
+        elif elasticity_score < 0.8 and elasticity_score > 0.1:
+            # Inelastic: Partner buys regardless of price. Protect the margin.
+            elasticity_signal = "Inelastic (Hold Price)"
+            safe_discount = 2.0 # Minimal discount just for relationship
         else:
-            safe_discount = 2.0
+            # Standard backoff based on margin
+            safe_discount = min(8.0, margin_rate * 100 * 0.4)
+
+        safe_discount = float(np.clip(safe_discount, 0.0, 100.0))
 
         offer_price = unit_price * (1.0 - safe_discount / 100.0) if np.isfinite(unit_price) else np.nan
         return {
@@ -882,6 +903,7 @@ class RecommendationMixin:
             "margin_rate": float(margin_rate),
             "safe_discount_pct": float(safe_discount),
             "offer_price": float(offer_price) if np.isfinite(offer_price) else np.nan,
+            "elasticity_signal": elasticity_signal,
         }
 
     def _build_pitch_templates(self, partner_name, action, tone, pricing):

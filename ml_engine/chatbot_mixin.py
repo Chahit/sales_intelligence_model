@@ -447,26 +447,7 @@ class ChatbotMixin:
             except Exception:
                 pass
 
-        # ── MODULE 7: Competitor Intelligence ─────────────────────────
-        if any(w in q for w in ["competi", "undercut", "cheaper", "price", "rival", "market share"]):
-            try:
-                summary = self.get_competitor_summary()
-                if isinstance(summary, dict) and summary.get("our_product_count", 0) > 0:
-                    block = (f"COMPETITOR INTELLIGENCE:\n"
-                             f"  Products in our catalog: {summary.get('our_product_count', 0)}\n"
-                             f"  Competitors monitored: {summary.get('competitor_count', 0)}\n"
-                             f"  Products being actively undercut: {summary.get('products_undercut', 0)}\n"
-                             f"  Products where we are cheaper: {summary.get('products_advantage', 0)}")
-                    undercuts = self.get_undercut_products(min_diff_pct=-5.0)
-                    if undercuts is not None and not undercuts.empty:
-                        plines = [
-                            f"  - {row.get('product_name','?')}: competitor {row.get('competitor_name','?')} is {float(row.get('price_diff_pct',0)):+.1f}% cheaper"
-                            for _, row in undercuts.head(10).iterrows()
-                        ]
-                        block += "\nUNDERCUT PRODUCTS:\n" + "\n".join(plines)
-                    sections.append(block)
-            except Exception:
-                pass
+        # Competitor intelligence removed
 
         # ── MODULE 8: Model Monitoring ─────────────────────────────────
         if any(w in q for w in ["model", "accuracy", "auc", "monitor", "drift", "quality", "train", "performance"]):
@@ -563,16 +544,15 @@ class ChatbotMixin:
 
         system_prompt = f"""You are a senior business intelligence assistant for CONSISTENT — a B2B distributor of lubricants, paints, greases, construction chemicals, and industrial products across India.
 
-You have DIRECT ACCESS to live production data from all 9 modules of the application, queried moments ago:
-  Module 1: Partner 360  — individual partner health, churn, credit, forecasts
-  Module 2: Market Basket — product bundle/cross-sell rules
-  Module 3: Clusters     — partner segments (VIP, Growth, Standard, At Risk)
-  Module 4: Inventory    — dead stock items and liquidation leads
-  Module 5: Lifecycle    — product growth velocity, EOL predictions, cannibalization
-  Module 6: Recommendations — best actions and pitches per partner
-  Module 7: Competitors  — price gaps, undercut products
-  Module 8: Monitoring   — model accuracy (ROC-AUC, PR-AUC)
-  Module 9: Sales Rep    — rep performance, tours, expenses, partner issues logged
+You have DIRECT ACCESS to live production data from all 7 modules of the application, queried moments ago:
+  Module 1: Partner 360         — individual partner health, churn, credit, forecasts
+  Module 2: Market Basket       — product bundle/cross-sell rules
+  Module 3: Clusters            — partner segments (VIP, Growth, Standard, At Risk)
+  Module 4: Inventory           — dead stock items and liquidation leads
+  Module 5: Product Lifecycle   — product growth velocity, EOL predictions, cannibalization
+  Module 6: Recommendations     — best actions and pitches per partner
+  Module 7: Sales Rep           — rep performance, tours, expenses, partner issues logged
+  Revenue Pipeline Tracker      — partner health segmented across Champion/Healthy/At Risk/Critical
 
 ═══ STRICT RULES ═══
 1. ONLY use data provided below. NEVER invent names, numbers, or figures.
