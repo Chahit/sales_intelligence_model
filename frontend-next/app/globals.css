@@ -1,99 +1,336 @@
+@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/* ── Nexus Precision Design System ─────────────────────────────── */
 :root {
-  --accent: #6366f1;
-  --accent2: #8b5cf6;
+  --surface:             #f7f9fb;
+  --surface-low:         #f2f4f6;
+  --surface-card:        #ffffff;
+  --surface-high:        #e6e8ea;
+  --surface-highest:     #dde0e3;
+  --on-surface:          #191c1e;
+  --on-surface-var:      #464555;
+  --outline:             #777587;
+  --outline-var:         #c7c4d8;
+  --primary:             #4F46E5;
+  --primary-deep:        #3525cd;
+  --primary-fixed:       #eef0ff;
+  --primary-fixed-dim:   #c3c0ff;
+  --secondary:           #181445;
+  --secondary-var:       #444173;
+  --green:               #059669;
+  --green-bg:            #ECFDF5;
+  --amber:               #B45309;
+  --amber-bg:            #FFFBEB;
+  --red:                 #DC2626;
+  --red-bg:              #FEF2F2;
+  --blue:                #2563EB;
+  --blue-bg:             #EFF6FF;
+  --shadow-card:         0 2px 12px rgba(25,28,30,0.05), 0 1px 3px rgba(25,28,30,0.04);
+  --shadow-float:        0 12px 32px rgba(25,28,30,0.07);
+  --shadow-elevated:     0 8px 24px rgba(79,70,229,0.10);
+  --radius: 12px;
 }
 
-/* Scrollbar */
-::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { background: #111; }
-::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: #555; }
-
-/* Glass card */
-.glass {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.07);
-  backdrop-filter: blur(12px);
-  border-radius: 12px;
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html { font-family: 'Inter', system-ui, sans-serif; }
+body {
+  background: var(--surface);
+  color: var(--on-surface);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Metric card gradient */
+/* ── Entry Animations ──────────────────────────────────────────── */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes shimmer {
+  0%   { background-position: -800px 0; }
+  100% { background-position:  800px 0; }
+}
+@keyframes pulseGlow {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.5; }
+}
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Typography ────────────────────────────────────────────────── */
+.display { font-family: 'Manrope', sans-serif; font-size: 3.5rem; font-weight: 800; letter-spacing: -0.03em; line-height: 1; }
+.headline { font-family: 'Manrope', sans-serif; font-size: 1.5rem; font-weight: 700; letter-spacing: -0.02em; }
+.title    { font-family: 'Inter', sans-serif; font-size: 1.0625rem; font-weight: 600; }
+.body-md  { font-family: 'Inter', sans-serif; font-size: 0.875rem; }
+.label    { font-family: 'Inter', sans-serif; font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.07em; text-transform: uppercase; color: var(--on-surface-var); }
+
+/* ── Page Header ────────────────────────────────────────────────── */
+.page-header { margin-bottom: 1.75rem; animation: fadeIn 0.3s ease-out; }
+.page-header h1 {
+  font-family: 'Manrope', sans-serif; font-size: 1.75rem; font-weight: 800;
+  color: var(--on-surface); letter-spacing: -0.025em; line-height: 1.1;
+}
+.page-header p { font-size: 0.875rem; color: var(--on-surface-var); margin-top: 0.25rem; line-height: 1.5; }
+
+/* ── Hero header with accent bar (from old Streamlit page_header helper) */
+.page-hero {
+  display: flex; align-items: center; gap: 16px;
+  padding: 18px 22px; margin-bottom: 20px; border-radius: 14px;
+  background: var(--surface-card); box-shadow: var(--shadow-card);
+  position: relative; overflow: hidden;
+  animation: fadeIn 0.3s ease-out;
+}
+.page-hero::before {
+  content: ""; position: absolute; top: 0; left: 0; right: 0; height: 3px;
+  background: var(--hero-accent, var(--primary)); border-radius: 14px 14px 0 0;
+}
+.page-hero-icon { font-size: 32px; line-height: 1; flex-shrink: 0; }
+.page-hero-title { font-family: 'Manrope', sans-serif; font-size: 1.3rem; font-weight: 800; letter-spacing: -0.02em; }
+.page-hero-sub { font-size: 12.5px; color: var(--on-surface-var); margin-top: 2px; }
+
+/* ── Cards ─────────────────────────────────────────────────────── */
+.card {
+  background: var(--surface-card); border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+}
+.card:hover { box-shadow: var(--shadow-float); }
+.card-inner { background: var(--surface-low); border-radius: calc(var(--radius) - 2px); }
+
+/* ── Metric Cards ───────────────────────────────────────────────── */
 .metric-card {
-  background: linear-gradient(135deg, rgba(99,102,241,0.12) 0%, rgba(139,92,246,0.06) 100%);
-  border: 1px solid rgba(99,102,241,0.2);
-  border-radius: 12px;
-  padding: 20px;
-  transition: all 0.2s ease;
+  background: var(--surface-card); border-radius: var(--radius);
+  padding: 1.25rem 1.375rem; box-shadow: var(--shadow-card);
+  transition: box-shadow 0.18s ease, transform 0.18s ease;
+  animation: scaleIn 0.25s ease-out;
 }
-.metric-card:hover {
-  border-color: rgba(99,102,241,0.45);
-  transform: translateY(-1px);
-  box-shadow: 0 8px 32px rgba(99,102,241,0.15);
+.metric-card:hover { box-shadow: var(--shadow-elevated); transform: translateY(-1px); }
+.metric-card .kpi-label {
+  font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--on-surface-var);
 }
+.metric-card .kpi-val {
+  font-family: 'Manrope', sans-serif; font-size: 1.875rem; font-weight: 800;
+  letter-spacing: -0.03em; color: var(--on-surface); line-height: 1.1; margin-top: 0.5rem;
+}
+/* Dense layout variant — use when 6+ KPI cards are on one row */
+.metric-card .kpi-val-sm, .kpi-val-sm {
+  font-family: 'Manrope', sans-serif; font-size: 1.3rem; font-weight: 700;
+  letter-spacing: -0.02em; color: var(--on-surface); line-height: 1.15; margin-top: 0.375rem;
+}
+.metric-card .kpi-sub { font-size: 0.75rem; color: var(--on-surface-var); margin-top: 0.25rem; }
+.metric-card .kpi-delta {
+  display: inline-flex; align-items: center; gap: 3px;
+  font-size: 0.6875rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; margin-top: 6px;
+}
+.kpi-delta-up   { background: var(--green-bg); color: var(--green); }
+.kpi-delta-down { background: var(--red-bg);   color: var(--red); }
+.kpi-delta-flat { background: var(--surface-high); color: var(--on-surface-var); }
 
-/* Badge */
+/* ── Panel ──────────────────────────────────────────────────────── */
+.panel {
+  background: var(--surface-card); border-radius: var(--radius);
+  box-shadow: var(--shadow-card); overflow: hidden; margin-bottom: 1rem;
+  animation: slideUp 0.28s ease-out;
+}
+.panel-header {
+  padding: 0.875rem 1.25rem; background: var(--surface-card);
+  border-bottom: 1px solid rgba(199,196,216,0.18);
+  display: flex; justify-content: space-between; align-items: center;
+}
+.panel-header .panel-title { font-size: 0.875rem; font-weight: 700; color: var(--on-surface); }
+.panel-header .panel-sub { font-size: 0.6875rem; color: var(--on-surface-var); }
+
+/* ── Section Label ──────────────────────────────────────────────── */
+.section-label {
+  font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--on-surface-var); margin: 1.375rem 0 0.75rem;
+  display: flex; align-items: center; gap: 0.5rem;
+}
+.section-label::after { content: ''; flex: 1; height: 1px; background: rgba(199,196,216,0.3); }
+
+/* ── SPIN Script Cards ──────────────────────────────────────────── */
+.spin-card {
+  display: flex; gap: 16px; align-items: flex-start;
+  padding: 16px 20px; border-radius: 12px;
+  border: 1px solid rgba(199,196,216,0.2);
+  background: var(--surface-card); margin-bottom: 14px;
+  box-shadow: var(--shadow-card); animation: slideUp 0.3s ease-out;
+  transition: box-shadow 0.15s;
+}
+.spin-card:hover { box-shadow: var(--shadow-float); }
+.spin-icon {
+  flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 800; font-size: 14px; color: #fff;
+}
+.spin-label {
+  font-weight: 700; font-size: 11.5px; text-transform: uppercase;
+  letter-spacing: 0.07em; margin-bottom: 6px;
+}
+.spin-body { font-size: 13.5px; line-height: 1.7; color: var(--on-surface-var); }
+.spin-body b { color: var(--on-surface); font-weight: 700; }
+.spin-body i { font-style: italic; }
+
+/* ── Kanban Board ───────────────────────────────────────────────── */
+.kanban-board {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 16px;
+  align-items: start;
+}
+.kanban-lane {
+  background: var(--surface-low); border-radius: 14px; padding: 0 0 8px;
+  box-shadow: var(--shadow-card); animation: fadeIn 0.3s ease-out;
+}
+.kanban-lane-header {
+  padding: 14px 16px 10px; border-radius: 14px 14px 0 0;
+  border-top: 4px solid;
+}
+.kanban-card {
+  background: var(--surface-card); border-radius: 10px; margin: 6px 10px;
+  padding: 12px 14px; box-shadow: var(--shadow-card);
+  cursor: pointer; transition: transform 0.14s, box-shadow 0.14s;
+}
+.kanban-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-float); }
+.kanban-card-name { font-weight: 700; font-size: 12.5px; color: var(--on-surface); margin-bottom: 6px; }
+.kanban-card-meta { font-size: 11px; color: var(--on-surface-var); display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+
+/* ── Info Banner (like old Streamlit banner helper) ─────────────── */
+.info-banner {
+  padding: 10px 16px; border-radius: 8px; margin-bottom: 14px;
+  font-size: 13.5px; font-weight: 500; line-height: 1.5;
+}
+.info-banner-green { background: var(--green-bg); border-left: 4px solid var(--green); color: #065f46; }
+.info-banner-amber { background: var(--amber-bg); border-left: 4px solid var(--amber); color: #78350f; }
+.info-banner-red   { background: var(--red-bg);   border-left: 4px solid var(--red);   color: #991b1b; }
+.info-banner-blue  { background: var(--blue-bg);  border-left: 4px solid var(--blue);  color: #1e40af; }
+
+/* ── Bundle Cards ───────────────────────────────────────────────── */
+.bundle-card {
+  background: var(--primary-fixed); border: 1px solid var(--primary-fixed-dim);
+  border-radius: 12px; padding: 14px 16px; text-align: center;
+  transition: transform 0.14s, box-shadow 0.14s;
+}
+.bundle-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-elevated); }
+
+/* ── Tabs ───────────────────────────────────────────────────────── */
+.tab-list { display: flex; gap: 4px; background: var(--surface-low); border-radius: 10px; padding: 4px; margin-bottom: 16px; }
+.tab-item {
+  padding: 6px 14px; border-radius: 8px; font-size: 12.5px; font-weight: 600; cursor: pointer;
+  color: var(--on-surface-var); border: none; background: transparent; transition: all 0.14s;
+}
+.tab-item.active { background: var(--surface-card); color: var(--primary); box-shadow: var(--shadow-card); }
+.tab-item:hover:not(.active) { color: var(--on-surface); background: var(--surface-high); }
+
+/* ── Badges ─────────────────────────────────────────────────────── */
 .badge {
-  display: inline-flex;
-  align-items: center;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  padding: 0.2rem 0.625rem; border-radius: 999px;
+  font-size: 0.6875rem; font-weight: 700; letter-spacing: 0.04em;
 }
+.badge-green  { background: var(--green-bg);  color: var(--green); }
+.badge-red    { background: var(--red-bg);    color: var(--red); }
+.badge-amber  { background: var(--amber-bg);  color: var(--amber); }
+.badge-blue   { background: var(--blue-bg);   color: var(--blue); }
+.badge-indigo { background: var(--primary-fixed); color: var(--primary); }
+.badge-gray   { background: var(--surface-high); color: var(--on-surface-var); }
 
-/* Table */
-.data-table { width: 100%; border-collapse: collapse; }
+/* ── Data Tables ────────────────────────────────────────────────── */
+.data-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.8125rem; }
 .data-table th {
-  text-align: left;
-  padding: 10px 14px;
-  color: #6b7280;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  border-bottom: 1px solid rgba(255,255,255,0.06);
+  padding: 0.5625rem 1rem; text-align: left; font-size: 0.625rem; font-weight: 700;
+  letter-spacing: 0.07em; text-transform: uppercase; color: var(--on-surface-var);
+  background: var(--surface-low); white-space: nowrap; position: sticky; top: 0; z-index: 1;
 }
 .data-table td {
-  padding: 10px 14px;
-  font-size: 13px;
-  border-bottom: 1px solid rgba(255,255,255,0.04);
+  padding: 0.6875rem 1rem; color: var(--on-surface);
+  border-bottom: 1px solid rgba(199,196,216,0.1); vertical-align: middle;
 }
-.data-table tbody tr:hover { background: rgba(255,255,255,0.02); }
+.data-table tbody tr:nth-child(even) td { background: rgba(242,244,246,0.5); }
+.data-table tbody tr:last-child td { border-bottom: none; }
+.data-table tbody tr:hover td { background: var(--primary-fixed); transition: background 0.1s; }
 
-/* Kanban card */
-.kanban-card {
-  background: rgba(255,255,255,0.03);
-  border: 1px solid rgba(255,255,255,0.07);
-  border-radius: 8px;
-  padding: 12px;
-  margin-bottom: 8px;
-  transition: all 0.15s;
+/* ── Forms ──────────────────────────────────────────────────────── */
+.form-select, .form-input {
+  width: 100%; padding: 0.5625rem 0.875rem;
+  background: var(--surface-low); border: none;
+  border-bottom: 2px solid rgba(199,196,216,0.5);
+  border-radius: 8px 8px 0 0; font-size: 0.875rem; color: var(--on-surface);
+  outline: none; transition: border-color 0.15s; appearance: none; -webkit-appearance: none;
 }
-.kanban-card:hover {
-  border-color: rgba(255,255,255,0.15);
-  background: rgba(255,255,255,0.05);
-}
-
-/* Page header gradient bar */
-.page-accent-bar {
-  height: 3px;
-  border-radius: 999px;
-  margin-bottom: 20px;
+.form-select:focus, .form-input:focus {
+  border-bottom-color: var(--primary); background: var(--surface-card);
 }
 
-/* Skeleton  */
+/* ── Range inputs ────────────────────────────────────────────────── */
+input[type="range"] {
+  -webkit-appearance: none; width: 100%; height: 4px;
+  border-radius: 999px; background: var(--surface-highest); outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary-deep), var(--primary));
+  cursor: pointer; box-shadow: 0 1px 4px rgba(79,70,229,0.3);
+}
+
+/* ── Gauge bars ─────────────────────────────────────────────────── */
+.gauge-track { height: 6px; background: var(--surface-highest); border-radius: 999px; overflow: hidden; margin-top: 0.5rem; }
+.gauge-fill  { height: 100%; border-radius: 999px; transition: width 0.45s ease; }
+
+/* ── Buttons ────────────────────────────────────────────────────── */
+.btn { display: inline-flex; align-items: center; gap: 0.375rem; padding: 0.5rem 1rem; border-radius: 0.75rem; font-size: 0.8125rem; font-weight: 600; cursor: pointer; transition: all 0.15s; border: none; }
+.btn-primary { background: linear-gradient(135deg, var(--primary-deep), var(--primary)); color: #fff; box-shadow: 0 2px 8px rgba(79,70,229,0.22); }
+.btn-primary:hover { box-shadow: 0 4px 16px rgba(79,70,229,0.3); transform: translateY(-1px); }
+.btn-ghost { background: var(--surface-high); color: var(--on-surface); }
+.btn-ghost:hover { background: var(--surface-highest); }
+.btn-outline { background: transparent; color: var(--primary); border: 1px solid rgba(79,70,229,0.3); }
+.btn-outline:hover { background: var(--primary-fixed); }
+
+/* ── SHAP bars ──────────────────────────────────────────────────── */
+.shap-bar-pos { background: linear-gradient(90deg, #059669, #34D399); border-radius: 999px; height: 8px; transition: width 0.4s ease; }
+.shap-bar-neg { background: linear-gradient(90deg, #F87171, #DC2626); border-radius: 999px; height: 8px; transition: width 0.4s ease; }
+
+/* ── Skeleton ────────────────────────────────────────────────────── */
 .skeleton {
-  background: linear-gradient(90deg, #1f1f2e 25%, #2a2a3e 50%, #1f1f2e 75%);
-  background-size: 200% 100%;
-  animation: skeleton-pulse 1.5s ease-in-out infinite;
-  border-radius: 6px;
+  height: 18px; border-radius: 6px;
+  background: linear-gradient(90deg, var(--surface-high) 25%, var(--surface-highest) 50%, var(--surface-high) 75%);
+  background-size: 800px 100%; animation: shimmer 1.4s ease-in-out infinite; margin-bottom: 10px;
 }
-@keyframes skeleton-pulse {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
+
+/* ── Scrollbar ──────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(--surface-low); }
+::-webkit-scrollbar-thumb { background: var(--surface-highest); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--outline-var); }
+
+/* ── Tailwind HSL bridge ─────────────────────────────────────────── */
+@layer base {
+  :root {
+    --background: 220 20% 97%;
+    --foreground: 222 16% 11%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 16% 11%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 16% 11%;
+    --primary: 243 75% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 220 14% 95%;
+    --secondary-foreground: 222 16% 11%;
+    --muted: 220 14% 95%;
+    --muted-foreground: 220 9% 45%;
+    --accent: 243 60% 95%;
+    --accent-foreground: 243 75% 58%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 220 13% 91%;
+    --input: 220 13% 95%;
+    --ring: 243 75% 58%;
+    --radius: 0.75rem;
+  }
 }

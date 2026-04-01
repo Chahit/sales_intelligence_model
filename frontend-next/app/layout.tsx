@@ -1,25 +1,29 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
 import "./globals.css";
 import { Providers } from "@/components/Providers";
 import { Sidebar } from "@/components/layout/Sidebar";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
-
 export const metadata: Metadata = {
-  title: "Consistent AI | Sales Intelligence Suite",
+  title: "Consistent AI — Sales Intelligence Suite",
   description: "AI-powered partner intelligence, clustering, and sales performance platform",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className="dark">
-      <body className={`${inter.variable} font-sans bg-[#0a0a0f] text-white antialiased`}>
+    <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+      </head>
+      <body style={{ background: "#f7f9fb", color: "#191c1e", fontFamily: "'Inter', system-ui, sans-serif" }}>
         <Providers>
-          <div className="flex h-screen overflow-hidden">
+          <div style={{ display: "flex", height: "100vh", overflow: "hidden" }}>
             <Sidebar />
-            <main className="flex-1 overflow-y-auto bg-[#0a0a0f]">
-              <div className="min-h-full p-6">{children}</div>
+            <main style={{ flex: 1, overflowY: "auto", background: "#f7f9fb" }}>
+              <div style={{ padding: "2rem 2.25rem", minHeight: "100%", maxWidth: 1400, margin: "0 auto" }}>
+                {children}
+              </div>
             </main>
           </div>
         </Providers>
@@ -27,3 +31,4 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     </html>
   );
 }
+

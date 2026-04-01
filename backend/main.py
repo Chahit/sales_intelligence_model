@@ -23,10 +23,14 @@ from backend.dependencies import get_engine
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Warm up the AI engine singleton on startup."""
+    """Warm up the AI engine singleton on startup (DB-fault-tolerant)."""
     engine = get_engine()
-    engine.ensure_core_loaded()
-    print("✅ SalesIntelligenceEngine ready.")
+    try:
+        engine.ensure_core_loaded()
+        print("✅ SalesIntelligenceEngine ready.")
+    except Exception as exc:
+        print(f"⚠️  Could not pre-load engine on startup: {exc}")
+        print("   → The server will still start. Each route will retry DB connection lazily.")
     yield
 
 
